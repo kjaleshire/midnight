@@ -1,10 +1,10 @@
 CC=clang
-CFLAGS=
+CFLAGS=-lev
 
-all: october
+all: midnight
 
-october: october.c october_worker.c october_logging.c october_parser.c
-	$(CC) $(CFLAGS) october.c october_worker.c october_logging.c october_parser.c -o october
+midnight: midnight.c midnight_logging.c
+	$(CC) $(CFLAGS) midnight.c midnight_logging.c -o midnight
 
 clean:
-	rm october
+	rm midnight

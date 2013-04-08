@@ -1,27 +1,14 @@
 /*
 
-Simple threaded HTTP server. Read GET replies from a host and respond appropriately.
+Midnight main header file
 
-Main header file
-
-(c) 2012 Kyle J Aleshire
+(c) 2013 Kyle J Aleshire
 All rights reserved
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#ifndef __october_h
-#define __october_h
+#ifndef __midnight_h
+#define __midnight_h
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -40,10 +27,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <fcntl.h>
 #include <assert.h>
 #include <time.h>
+#include <sys/queue.h>
+#include <semaphore.h>
+#include <ev.h>
 
-#define BUFFSIZE		1024
+#define DEBUG
+#define N_THREADS 4
+
+#define BUFFSIZE		16384
 #define LISTENQ			1024
 #define DOCROOT			"site"
+#define MAXQUEUESIZE    16
 
 /* error types */
 #define ERRPROG			-1
@@ -79,7 +73,7 @@ enum {
 #define DATE_H			"Date: "
 #define CONTENT_T_H		"Content-Type: "
 #define EXPIRES_H		"Expires: -1"
-#define SERVER_H		"Server: Midnight"
+#define SERVER_H		"Server: midnight"
 
 /* MIME types... */
 #define MIME_HTML		"text/html; "
@@ -118,10 +112,6 @@ enum {
 /* misc. defs */
 #define CRLF "\r\n"
 
-typedef struct threadargs {
-
-} threadargs_t;
-
 typedef struct reqargs {
 	uint32_t conn_flags;
 	char scratchbuff[BUFFSIZE];
@@ -130,14 +120,34 @@ typedef struct reqargs {
 } reqargs_t;
 
 int log_level;
+int listen_sd;
+int open_sd;
 FILE* log_fd;
 pthread_mutex_t mtx_term;
+pthread_mutex_t mtx_conn_queue;
+sem_t sem_q_empty, sem_q_full;
 
-void oct_worker_thread(threadargs_t*);
-void oct_get_handler(reqargs_t*, threadargs_t*);
-char* oct_detect_type(char*);
-void oct_worker_cleanup(threadargs_t* t_args);
-void oct_panic(int error, const char* message, ...);
-void oct_log(int err_level, const char* message, ...);
+STAILQ_HEAD(stailhead, conn_data) head = STAILQ_HEAD_INITIALIZER(head);
+struct stailhead *q_conn_head;
 
-#endif /* __october_h */
+typedef struct conn_data {
+    int open_sd;
+    struct sockaddr_in conn_info;
+    STAILQ_ENTRY(conn_data) q_entries;
+} conn_data_t;
+
+STAILQ_INIT(&head);
+
+void worker_thread(void*);
+void get_handler(reqargs_t*, void*);
+char* detect_type(char*);
+void worker_cleanup(void*);
+
+int log_init();
+void panic(int error, const char* message, ...);
+void logmsg(int err_level, const char* message, ...);
+
+static void accept_ready_cb(struct ev_loop*, ev_io*, int);
+static void queue_ready_cb(struct ev_loop*, ev_io*, int);
+
+#endif /* __midnight_h */

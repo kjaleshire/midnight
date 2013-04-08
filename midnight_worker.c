@@ -2,18 +2,16 @@
 
 Midnight worker thread
 
-(c) 2012 Kyle J Aleshire
+(c) 2013 Kyle J Aleshire
 All rights reserved
 
 */
 
 #include "midnight.h"
 
-void oct_worker_thread(threadargs_t *t_args) {
+void worker_thread(threadargs_t *t_args) {
 
-
-
-    pthread_cleanup_push( (void (*) (void *)) oct_worker_cleanup, t_args);
+    pthread_cleanup_push( (void (*) (void *)) worker_cleanup, t_args);
 
     /* initialize our buffer indices & flags */
     t_args->readindex = 0;
@@ -27,7 +25,7 @@ void oct_worker_thread(threadargs_t *t_args) {
     } else {
         assert( t_args->readindex <= BUFFSIZE );
         t_args->readbuff[t_args->readindex] = '\0';
-        oct_log(LOGDEBUG, "connection read %d bytes as request: %s", t_args->readindex, t_args->readbuff);
+        log(LOGDEBUG, "connection read %d bytes as request: %s", t_args->readindex, t_args->readbuff);
     }
 
     /* we have the request string, read the type of request into the request buffer now for comparison.
@@ -46,19 +44,19 @@ void oct_worker_thread(threadargs_t *t_args) {
         request->conn_flags |= GET_F;
 
         if( (request->file = strsep(&nexttoken, " ")) == NULL) {
-            oct_log(THREADERRPROG, "no filename received, assuming \"/\"");
+            log(THREADERRPROG, "no filename received, assuming \"/\"");
             request->file = "/";
         } else {
-            oct_log(LOGDEBUG, "file %s requested", request->file);
+            log(LOGDEBUG, "file %s requested", request->file);
         }
 
         if( (token = strsep(&nexttoken, " ")) == NULL ) {
-            oct_log(LOGDEBUG, "no protocol requested, assuming HTTP/1.0");
+            log(LOGDEBUG, "no protocol requested, assuming HTTP/1.0");
         } else {
             if( strcmp(HTTP11_H, token) == 0 ) {
                 request->conn_flags |= HTTP11_F;
             }
-            oct_log(LOGDEBUG, "protocol %s requested", token);
+            log(LOGDEBUG, "protocol %s requested", token);
         }
     /* test for other request types */
     } else if( strcmp(HEAD, token) == 0 ) {
@@ -76,32 +74,32 @@ void oct_worker_thread(threadargs_t *t_args) {
         token = strsep(&nexttoken, " ");
         if ( strcmp(HOST_H, token) == 0 ) {
             request->conn_flags |= HOST_F;
-            oct_log(LOGDEBUG, "Host header found: %s", strsep(&nexttoken, " "));
+            log(LOGDEBUG, "Host header found: %s", strsep(&nexttoken, " "));
         } else if ( strcmp(CONNECTION_H, token)  == 0 ) {
-            oct_log(LOGDEBUG, "Connection header found");
+            log(LOGDEBUG, "Connection header found");
             if( strcmp(KEEPALIVE_H, strsep(&nexttoken, " ")) == 0 && (request->conn_flags | HTTP11_F) ) {
                 request->conn_flags |= CONNECTION_F;
-                oct_log(LOGDEBUG, "keep-alive set");
+                log(LOGDEBUG, "keep-alive set");
             }
         }
     }
 
     if(GET_F & request->conn_flags) {
-        oct_get_handler(request, t_args);
+        get_handler(request, t_args);
     } else if ( request->conn_flags & OPTIONS_F ||
                 request->conn_flags & HEAD_F ||
                 request->conn_flags & POST_F ||
                 request->conn_flags & PUT_F ) {
-        oct_log(LOGDEBUG, "application does not support POST, HEAD, OPTIONS or PUT");
+        log(LOGDEBUG, "application does not support POST, HEAD, OPTIONS or PUT");
     } else {
-        oct_panic(THREADERRPROG, "malformed request method:\n%s", t_args->readbuff);
+        panic(THREADERRPROG, "malformed request method:\n%s", t_args->readbuff);
     }
 
     pthread_cleanup_pop(1);
     pthread_exit(NULL);
 }
 
-void oct_get_handler(reqargs_t *request, threadargs_t *t_args) {
+void get_handler(reqargs_t *request, threadargs_t *t_args) {
     int v; char *c;
     int file_fd;
     time_t ticks;
@@ -154,9 +152,9 @@ void oct_get_handler(reqargs_t *request, threadargs_t *t_args) {
         ticks = time(NULL);
         assert(t_args->writeindex == 0);
 
-        oct_log(LOGDEBUG, "detecting if file exists: %s", t_args->writebuff);
+        log(LOGDEBUG, "detecting if file exists: %s", t_args->writebuff);
         if( stat(t_args->writebuff, NULL) < 0 && errno == ENOENT ) {
-            oct_log(LOGINFO, "404 File not Found: %s", t_args->writebuff);
+            log(LOGINFO, "404 File not Found: %s", t_args->writebuff);
 
             t_args->writeindex += snprintf(&(t_args->writebuff[t_args->writeindex]), BUFFSIZE, "%s ", request->conn_flags | HTTP11_F ? HTTP11_H : HTTP10_H);
             t_args->writeindex += snprintf(&(t_args->writebuff[t_args->writeindex]), BUFFSIZE, "%s%s", NOTFOUND_R, CRLF);
@@ -166,13 +164,13 @@ void oct_get_handler(reqargs_t *request, threadargs_t *t_args) {
 
             assert(t_args->writeindex <= BUFFSIZE);
         } else {
-            oct_log(LOGINFO, "200 OK: %s", t_args->writebuff);
+            log(LOGINFO, "200 OK: %s", t_args->writebuff);
             if( (file_fd = open(t_args->writebuff, O_RDONLY)) < 0 ){
-                oct_panic(THREADERRSYS, "error opening file: %s", t_args->writebuff);
+                panic(THREADERRSYS, "error opening file: %s", t_args->writebuff);
             } else {
-                oct_log(LOGDEBUG, "file opened: %s", t_args->writebuff);
+                log(LOGDEBUG, "file opened: %s", t_args->writebuff);
             }
-            request->mimetype = oct_detect_type(t_args->writebuff);
+            request->mimetype = detect_type(t_args->writebuff);
 
             t_args->writeindex += snprintf(&(t_args->writebuff[t_args->writeindex]), BUFFSIZE, "%s ", request->conn_flags | HTTP11_F ? HTTP11_H : HTTP10_H);
             t_args->writeindex += snprintf(&(t_args->writebuff[t_args->writeindex]), BUFFSIZE, "%s%s", OK_R, CRLF);
@@ -183,16 +181,16 @@ void oct_get_handler(reqargs_t *request, threadargs_t *t_args) {
             assert(t_args->writeindex <= BUFFSIZE);
 
             while( (v = read(file_fd, &(t_args->writebuff[t_args->writeindex]), BUFFSIZE - t_args->writeindex)) != 0 ) {
-                oct_log(LOGDEBUG, "read %d bytes from file descriptor", v);
+                log(LOGDEBUG, "read %d bytes from file descriptor", v);
                 if( v < 0 ) {
-                    oct_panic(THREADERRSYS, "worker thread read error");
+                    panic(THREADERRSYS, "worker thread read error");
                 } else {
                     t_args->writeindex += v;
                     assert(t_args->writeindex <= BUFFSIZE);
                     if( (v = write(t_args->conn_fd, t_args->writebuff, t_args->writeindex)) < 0) {
-                        oct_panic(THREADERRSYS, "connection write error");
+                        panic(THREADERRSYS, "connection write error");
                     } else {
-                        oct_log(LOGDEBUG, "wrote %d bytes on connection socket", v);
+                        log(LOGDEBUG, "wrote %d bytes on connection socket", v);
                         if(t_args->writeindex == BUFFSIZE) {
                             t_args->writeindex = 0;
                         }
@@ -202,13 +200,13 @@ void oct_get_handler(reqargs_t *request, threadargs_t *t_args) {
         }
 
         if( (v = write(t_args->conn_fd, t_args->writebuff, t_args->writeindex)) < 0 || (v += write(t_args->conn_fd, CRLF, 2)) < 0) {
-            oct_panic(THREADERRSYS, "connection write error");
+            panic(THREADERRSYS, "connection write error");
         } else {
-            oct_log(LOGDEBUG, "wrote %d bytes on connection socket", v);
+            log(LOGDEBUG, "wrote %d bytes on connection socket", v);
         }
 }
 
-char* oct_detect_type(char* filename) {
+char* detect_type(char* filename) {
     char *c;
     if( (c = strrchr(filename, '.')) == NULL || strcmp(c, ".txt") == 0 ) {
         c = MIME_TXT;
@@ -227,15 +225,15 @@ char* oct_detect_type(char* filename) {
     } else {
         c = MIME_TXT;
     }
-    oct_log(LOGDEBUG, "detected MIME type: %s", c);
+    log(LOGDEBUG, "detected MIME type: %s", c);
     return c;
 }
 
-void oct_worker_cleanup(threadargs_t *t_args) {
+void worker_cleanup(threadargs_t *t_args) {
     if(close(t_args->conn_fd) < 0) {
-        oct_panic(ERRSYS, "connection socket close error");
+        panic(ERRSYS, "connection socket close error");
     } else {
-        oct_log(LOGINFO, "connection socket closed");
+        log(LOGINFO, "connection socket closed");
     }
 
     free(t_args->request);

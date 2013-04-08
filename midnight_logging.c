@@ -1,15 +1,25 @@
 /*
 
-Simple threaded HTTP server. Read GET replies from a host and respond appropriately.
+Midnight logging & panic facilities
 
-Logging & panic facilities
-
-(c) 2012 Kyle J Aleshire
+(c) 2013 Kyle J Aleshire
 All rights reserved
 
 */
 
 #include "midnight.h"
+
+/* initialize the log facility */
+int log_init() {
+    pthread_mutexattr_t mtx_attr;
+    if( pthread_mutexattr_init(&mtx_attr) != 0 ||
+        pthread_mutexattr_settype(&mtx_attr, PTHREAD_MUTEX_RECURSIVE) != 0 ||
+        pthread_mutex_init(&mtx_term, &mtx_attr) != 0 ) {
+            printf("System error: unable to initialize terminal mutex");
+            exit(ERRSYS);
+    }
+    return 0;
+}
 
 /* error handler. whole program dies on main thread panic, worker dies on worker thread panic. */
 void panic(int error, const char* message, ...) {
@@ -45,10 +55,10 @@ void panic(int error, const char* message, ...) {
 }
 
 /* log stuff */
-void log(int err_level, const char* message, ...) {
+void logmsg(int err_level, const char* message, ...) {
     if(err_level <= log_level) {
         if (pthread_mutex_lock(&mtx_term) != 0 ) {
-            oct_panic(ERRSYS, "error acquiring terminal mutex");
+            panic(ERRSYS, "error acquiring terminal mutex");
         }
         printf("%u:\t", (unsigned int) pthread_self());
         va_list arglist;
