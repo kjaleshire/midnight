@@ -57,20 +57,19 @@ int main(int argc, char *argv[]){
 			panic(ERRSYS, "error creating queue locking mechanisms");
 	}
 
-/*
 	for(v = 0; v < N_THREADS; v++) {
-
 		if( (pthread_create(&threads[v], NULL, (void *(*)(void *)) worker_thread, NULL)) < 0) {
 			panic(ERRSYS, "thread pool spawn failure");
 		}
 	}
-*/
+
+	STAILQ_INIT(&conn_q_head);
+
 	default_loop = EV_DEFAULT;
 
 	ev_io_init(&w_listen, accept_ready_cb, listen_sd, EV_READ);
 	ev_io_start(default_loop, &w_listen);
 
-	/* enter our runloop */
 	for(;;) {
 		ev_run(default_loop, 0);
 	}
@@ -88,7 +87,8 @@ static void accept_ready_cb(struct ev_loop *loop, ev_io* w_listen, int revents) 
 
 	sem_wait(&sem_q_empty);
 	pthread_mutex_lock(&mtx_conn_queue);
-	STAILQ_INSERT_TAIL(&q_conn_head, new_conn, q_entries);
+	STAILQ_INSERT_TAIL(&conn_q_head, new_conn, conn_q_next);
 	pthread_mutex_unlock(&mtx_conn_queue);
 	sem_post(&sem_q_full);
+	logmsg(LOGINFO, "posted new connection to queue");
 }

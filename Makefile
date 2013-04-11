@@ -3,8 +3,8 @@ CFLAGS=-lev
 
 all: midnight
 
-midnight: midnight.c midnight_logging.c
-	$(CC) $(CFLAGS) midnight.c midnight_logging.c -o midnight
+midnight: midnight.c midnight_logging.c midnight_worker.c
+	$(CC) $(CFLAGS) midnight.c midnight_logging.c midnight_worker.c -o midnight
 
 clean:
 	rm midnight

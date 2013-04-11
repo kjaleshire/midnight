@@ -27,9 +27,10 @@ All rights reserved
 #include <fcntl.h>
 #include <assert.h>
 #include <time.h>
-#include <sys/queue.h>
 #include <semaphore.h>
 #include <ev.h>
+
+#include "midnight_queue.h"
 
 #define DEBUG
 #define N_THREADS 4
@@ -108,7 +109,6 @@ enum {
 #define HOST_F			1 << 6
 #define CONNECTION_F	1 << 7
 
-
 /* misc. defs */
 #define CRLF "\r\n"
 
@@ -121,22 +121,10 @@ typedef struct reqargs {
 
 int log_level;
 int listen_sd;
-int open_sd;
 FILE* log_fd;
 pthread_mutex_t mtx_term;
 pthread_mutex_t mtx_conn_queue;
 sem_t sem_q_empty, sem_q_full;
-
-STAILQ_HEAD(stailhead, conn_data) head = STAILQ_HEAD_INITIALIZER(head);
-struct stailhead *q_conn_head;
-
-typedef struct conn_data {
-    int open_sd;
-    struct sockaddr_in conn_info;
-    STAILQ_ENTRY(conn_data) q_entries;
-} conn_data_t;
-
-STAILQ_INIT(&head);
 
 void worker_thread(void*);
 void get_handler(reqargs_t*, void*);
