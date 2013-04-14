@@ -30,7 +30,7 @@ All rights reserved
 #include <semaphore.h>
 #include <ev.h>
 
-#include "midnight_queue.h"
+#include <sys/queue.h>
 
 #define DEBUG
 #define N_THREADS 4
@@ -38,13 +38,11 @@ All rights reserved
 #define BUFFSIZE		16384
 #define LISTENQ			1024
 #define DOCROOT			"site"
-#define MAXQUEUESIZE    16
+#define MAXQUEUESIZE	16
 
 /* error types */
 #define ERRPROG			-1
 #define ERRSYS			-2
-#define THREADERRPROG	-10
-#define THREADERRSYS	-20
 
 /* logging levels */
 enum {
@@ -53,7 +51,7 @@ enum {
 	LOGERR,
 	LOGINFO,
 	LOGDEBUG
-} LOGLEVEL;
+};
 
 /* request types */
 #define GET				"GET"
@@ -63,12 +61,14 @@ enum {
 #define PUT				"PUT"
 
 /* response types. HTTP 1.0 since we're not (yet) supporting a lot of HTTP 1.1 (specifically Connection: keep-alive) */
+#define HTTP11_R		"HTTP/1.1"
+#define HTTP10_R		"HTTP/1.0"
 #define OK_R			"200 OK"
 #define NOTFOUND_R		"404 Not Found"
-#define NOTFOUNDHTML	"<html><body><p>Error 404, resource not found.</p></body></html>"
+#define NOTFOUND_HTML	"<html><body><p>Error 404, resource not found.</p></body></html>"
 
 /* default filename */
-#define DEFAULTFILE		"index.html"
+#define DEFAULT_FILE		"index.html"
 
 /* response headers */
 #define DATE_H			"Date: "
@@ -92,11 +92,6 @@ enum {
 #define HOST_H			"Host:"
 #define CONNECTION_H	"Connection:"
 
-/* header values */
-#define KEEPALIVE_H		"keep-alive"
-#define HTTP11_H		"HTTP/1.1"
-#define HTTP10_H		"HTTP/1.0"
-
 /* special flags */
 #define GET_F			1 << 0
 #define OPTIONS_F		1 << 1
@@ -104,38 +99,50 @@ enum {
 #define POST_F			1 << 3
 #define PUT_F			1 << 4
 
-#define HTTP11_F		1 << 5
+#define HTTP11_F		1 << 8
 
-#define HOST_F			1 << 6
-#define CONNECTION_F	1 << 7
+#define HOST_F			1 << 9
+#define CONNECTION_F	1 << 10
 
-/* misc. defs */
+/* HTTP line terminator */
 #define CRLF "\r\n"
+
+typedef struct thread_args {
+	int thread_no;
+} thread_args_t;
 
 typedef struct reqargs {
 	uint32_t conn_flags;
-	char scratchbuff[BUFFSIZE];
+
 	char* file;
 	char* mimetype;
+
 } reqargs_t;
+
+typedef struct conn_data {
+    int open_sd;
+    struct sockaddr_in conn_info;
+    STAILQ_ENTRY(conn_data) conn_q_next;
+} conn_data_t;
+
+extern STAILQ_HEAD(conn_q_head_struct, conn_data) conn_q_head;
 
 int log_level;
 int listen_sd;
 FILE* log_fd;
 pthread_mutex_t mtx_term;
 pthread_mutex_t mtx_conn_queue;
-sem_t sem_q_empty, sem_q_full;
+sem_t* sem_q_empty;
+sem_t* sem_q_full;
 
-void worker_thread(void*);
+void worker_thread(thread_args_t *);
 void get_handler(reqargs_t*, void*);
 char* detect_type(char*);
-void worker_cleanup(void*);
 
 int log_init();
-void panic(int error, const char* message, ...);
+void panic(const char* message, ...);
 void logmsg(int err_level, const char* message, ...);
 
-static void accept_ready_cb(struct ev_loop*, ev_io*, int);
-static void queue_ready_cb(struct ev_loop*, ev_io*, int);
+void accept_ready_cb(struct ev_loop*, ev_io*, int);
 
 #endif /* __midnight_h */

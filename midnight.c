@@ -9,8 +9,10 @@ All rights reserved
 
 #include "midnight.h"
 
-#define PORT 80
+#define PORT 8080
 #define ADDRESS "127.0.0.1"
+
+struct conn_q_head_struct conn_q_head = STAILQ_HEAD_INITIALIZER(conn_q_head);
 
 int main(int argc, char *argv[]){
 	int v;
@@ -44,22 +46,24 @@ int main(int argc, char *argv[]){
 		bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
 		listen(listen_sd, LISTENQ) < 0
 	) {
-		panic(ERRSYS, "error creating & binding socket to %s",
+		panic("error creating & binding socket to %s",
 			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : ADDRESS);
 	} else {
 		logmsg(LOGINFO, "socket bound to %s",
 			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : ADDRESS);
 	}
 
-	if( (sem_q_empty = sem_open("q_empty", O_CREAT, 0, MAXQUEUESIZE) == SEM_FAILED) ||
-		(sem_q_full = sem_open("q_full", O_CREAT, 0, 0) == SEM_FAILED) ||
-		pthread_mutex_init(&mtx_conn_queue, NULL) != 0 ) {
-			panic(ERRSYS, "error creating queue locking mechanisms");
+	if( ( (sem_q_empty = sem_open("conn_empty", O_CREAT, 0644, MAXQUEUESIZE)) == SEM_FAILED) ||
+		( (sem_q_full = sem_open("conn_full", O_CREAT, 0644, 0)) == SEM_FAILED) ||
+		(pthread_mutex_init(&mtx_conn_queue, NULL) != 0 ) ) {
+			panic("error creating connection queue locking mechanisms");
 	}
 
 	for(v = 0; v < N_THREADS; v++) {
-		if( (pthread_create(&threads[v], NULL, (void *(*)(void *)) worker_thread, NULL)) < 0) {
-			panic(ERRSYS, "thread pool spawn failure");
+		thread_args_t* t_args = malloc(sizeof(thread_args_t));
+		t_args->thread_no = v + 1;
+		if( (pthread_create(&threads[v], NULL, (void *(*)(void *)) worker_thread, t_args)) < 0) {
+			panic("thread pool spawn failure");
 		}
 	}
 
@@ -70,25 +74,29 @@ int main(int argc, char *argv[]){
 	ev_io_init(&w_listen, accept_ready_cb, listen_sd, EV_READ);
 	ev_io_start(default_loop, &w_listen);
 
+	logmsg(LOGINFO, "entering event loop");
+
 	for(;;) {
 		ev_run(default_loop, 0);
 	}
+
+	logmsg(LOGINFO, "shutting down!");
 }
 
-static void accept_ready_cb(struct ev_loop *loop, ev_io* w_listen, int revents) {
+void accept_ready_cb(struct ev_loop *loop, ev_io* w_listen, int revents) {
 	socklen_t sock_size = sizeof(struct sockaddr_in);
 	conn_data_t *new_conn = malloc(sizeof(conn_data_t));
 
 	if( (new_conn->open_sd = accept(listen_sd, (struct sockaddr *) &(new_conn->conn_info), &sock_size)) < 0) {
-		panic(ERRSYS, "connection accept failure from client %s", inet_ntoa(new_conn->conn_info.sin_addr));
+		panic("connection accept failure from client %s", inet_ntoa(new_conn->conn_info.sin_addr));
 	} else {
 		logmsg(LOGINFO, "accepted connection from client %s", inet_ntoa(new_conn->conn_info.sin_addr));
 	}
 
-	sem_wait(&sem_q_empty);
+	sem_wait(sem_q_empty);
 	pthread_mutex_lock(&mtx_conn_queue);
 	STAILQ_INSERT_TAIL(&conn_q_head, new_conn, conn_q_next);
 	pthread_mutex_unlock(&mtx_conn_queue);
-	sem_post(&sem_q_full);
-	logmsg(LOGINFO, "posted new connection to queue");
+	sem_post(sem_q_full);
+	logmsg(LOGINFO, "queued new connection");
 }
