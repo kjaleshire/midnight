@@ -10,6 +10,7 @@ All rights reserved
 #ifndef __midnight_h
 #define __midnight_h
 
+/* INCLUDES */
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -28,10 +29,50 @@ All rights reserved
 #include <assert.h>
 #include <time.h>
 #include <semaphore.h>
-#include <ev.h>
+#include <ev.h>					// libev event handler
+#include <sys/queue.h>			// queue macros
+#include "midnight_parser.h"	// parser header
 
-#include <sys/queue.h>
+/* MACRO DEFINITIONS */
+#define MD_BUFF(info, msg, ...)	\
+		info->buff_dex += snprintf(&(info->buff[info->buff_dex]), \
+		BUFFSIZE - info->buff_dex, msg, ##__VA_ARGS__)
 
+#ifdef DEBUG
+#define MD_LOG(errlev, msg, ...)	\
+		do {	\
+			if(errlev <= log_level) {	\
+				pthread_mutex_lock(&mtx_term);	\
+				fprintf(log_fd, "tID %d", pthread_self());
+				fprintf(log_fd, msg, ##__VA_ARGS__);	\
+				fprintf(log_fd, "\n");	\
+				pthread_mutex_unlock(&mtx_term);	\
+			}	\
+		} while(0)
+#else
+#define MD_LOG(errlev, msg, ...)	\
+		do {	\
+			if(errlev <= log_level) {	\
+				pthread_mutex_lock(&mtx_term);	\
+				fprintf(log_fd, msg, ##__VA_ARGS__);	\
+				fprintf(log_fd, "\n");	\
+				pthread_mutex_unlock(&mtx_term);	\
+			}	\
+		} while(0)
+#endif
+
+#define MD_LOG_INIT()	\
+		do {	\
+			pthread_mutexattr_t mtx_attr;	\
+    		if( pthread_mutexattr_init(&mtx_attr) != 0 ||	\
+	        pthread_mutexattr_settype(&mtx_attr, PTHREAD_MUTEX_RECURSIVE) != 0 ||	\
+	        pthread_mutex_init(&mtx_term, &mtx_attr) != 0 ) {	\
+	            printf("System error: unable to initialize terminal mutex");	\
+	            exit(ERRSYS);	\
+        	}	\
+		} while(0)
+
+/* CONSTANT DEFINITIONS */
 #define DEBUG
 #define N_THREADS 4
 
@@ -60,15 +101,15 @@ enum {
 #define HEAD			"HEAD"
 #define PUT				"PUT"
 
-/* response types. HTTP 1.0 since we're not (yet) supporting a lot of HTTP 1.1 (specifically Connection: keep-alive) */
+/* response types */
 #define HTTP11_R		"HTTP/1.1"
-#define HTTP10_R		"HTTP/1.0"
-#define OK_R			"200 OK"
-#define NOTFOUND_R		"404 Not Found"
-#define NOTFOUND_HTML	"<html><body><p>Error 404, resource not found.</p></body></html>"
+#define OK_S			"200 OK"
+#define NF_S		"404 Not Found"
+#define NF_HTML	"<html><body><p>Error 404,			\
+				resource not found.</p></body></html>"
 
 /* default filename */
-#define DEFAULT_FILE		"index.html"
+#define DEFAULT_FILE	"index.html"
 
 /* response headers */
 #define DATE_H			"Date: "
@@ -107,9 +148,12 @@ enum {
 /* HTTP line terminator */
 #define CRLF "\r\n"
 
-typedef struct thread_args {
+typedef struct thread_info {
 	int thread_no;
-} thread_args_t;
+
+	char buff[BUFFSIZE];
+    int buff_dex;
+} thread_info_t;
 
 typedef struct reqargs {
 	uint32_t conn_flags;
@@ -125,8 +169,6 @@ typedef struct conn_data {
     STAILQ_ENTRY(conn_data) conn_q_next;
 } conn_data_t;
 
-extern STAILQ_HEAD(conn_q_head_struct, conn_data) conn_q_head;
-
 int log_level;
 int listen_sd;
 FILE* log_fd;
@@ -134,15 +176,10 @@ pthread_mutex_t mtx_term;
 pthread_mutex_t mtx_conn_queue;
 sem_t* sem_q_empty;
 sem_t* sem_q_full;
+extern STAILQ_HEAD(conn_q_head_struct, conn_data) conn_q_head;
 
-void worker_thread(thread_args_t *);
-void get_handler(reqargs_t*, void*);
-char* detect_type(char*);
-
-int log_init();
-void panic(const char* message, ...);
-void logmsg(int err_level, const char* message, ...);
-
-void accept_ready_cb(struct ev_loop*, ev_io*, int);
+void md_worker(thread_info_t *t_info);
+void md_panic(const char* message, ...);
+void md_accept_cb(struct ev_loop*, ev_io*, int);
 
 #endif /* __midnight_h */
