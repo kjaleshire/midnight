@@ -1,7 +1,7 @@
 CC=clang
 CFLAGS=-lev
 ANALYZEFLAGS=--analyze -Wall
-DEBUGFLAGS=-O0 -g -Wall  -Wwrite-strings -Wdeclaration-after-statement -Wcast-qual -Wstrict-prototypes -Wshadow -Wextra -Wno-deprecated-declarations -Waggregate-return -Wchar-subscripts
+DEBUGFLAGS=-O0 -g
 PRODFLAGS=-O4
 RAGEL=ragel
 SOURCEFILES=midnight.c midnight_worker.c midnight_parser.c

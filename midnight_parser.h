@@ -8,10 +8,6 @@
 
 #include <sys/types.h>
 
-#if defined(_WIN32)
-#include <stddef.h>
-#endif
-
 typedef void (*element_cb)(void *data, const char *at, size_t length);
 typedef void (*field_cb)(void *data, const char *field, size_t flen, const char *value, size_t vlen);
 
@@ -36,7 +32,7 @@ typedef struct http_parser {
     element_cb http_version;
     element_cb header_done;
 
-} http_parser_t;
+} http_parser;
 
 void http_parser_init(http_parser *parser);
 void http_parser_alloc(http_parser *parser);
@@ -48,4 +44,13 @@ int http_parser_is_finished(http_parser *parser);
 
 #define http_parser_nread(parser) (parser)->nread
 
-#endif
+void md_http_field(void *data, const char *field, size_t flen, const char *value, size_t vlen);
+void md_request_method(void *data, const char *at, size_t length);
+void md_request_uri(void *data, const char *at, size_t length);
+void md_fragment(void *data, const char *at, size_t length);
+void md_request_path(void *data, const char *at, size_t length);
+void md_query_string(void *data, const char *at, size_t length);
+void md_http_version(void *data, const char *at, size_t length);
+void md_header_done(void *data, const char *at, size_t length);
+
+#endif /* http11_parser_h */

@@ -19,21 +19,16 @@ int main(int argc, char *argv[]){
 	int listen_address;
 	struct sockaddr_in servaddr;
 	pthread_t threads[N_THREADS];
-	struct main_thread_info {
-		int thread_no;
-	};
-
-	struct main_thread_info *main_info = malloc(sizeof(struct main_thread_info));
-	main_info->thread_no = 0;
 
 	struct ev_loop* default_loop;
-	ev_io w_listen;
+	ev_io watcher_accept;
+	ev_signal watcher_sigint;
 
 	log_level = LOGDEBUG;
 	log_fd = stdout;
 
 	/* initialize the terminal output mutex before we start logging stuff */
-	MD_LOG_INIT();
+	md_log_init();
 
 	/* inet_pton(AF_INET, ADDRESS, &listen_address); */
 	listen_address = htonl(INADDR_ANY);
@@ -52,25 +47,25 @@ int main(int argc, char *argv[]){
 		bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
 		listen(listen_sd, LISTENQ) < 0
 	) {
-		md_panic("error creating & binding socket to %s",
+		md_fatal("error creating & binding socket to %s",
 			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : ADDRESS);
 	} else {
-		MD_LOG(LOGINFO, "socket bound to %s",
+		#ifdef DEBUG
+		md_log(LOGDEBUG, "socket bound to %s",
 			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : ADDRESS);
+		#endif
 	}
 
 	if( ( (sem_q_empty = sem_open("conn_empty", O_CREAT, 0644, MAXQUEUESIZE)) == SEM_FAILED) ||
 		( (sem_q_full = sem_open("conn_full", O_CREAT, 0644, 0))
 		 == SEM_FAILED) ||
 		(pthread_mutex_init(&mtx_conn_queue, NULL) != 0 ) ) {
-			md_panic("error creating connection queue locking mechanisms");
+			md_fatal("error creating connection queue locking mechanisms");
 	}
 
 	for(v = 0; v < N_THREADS; v++) {
-		thread_info_t* t_info = malloc(sizeof(thread_info_t));
-		t_info->thread_no = v + 1;
-		if( (pthread_create(&threads[v], NULL, (void *(*)(void *)) md_worker, t_info)) < 0) {
-			md_panic("thread pool spawn failure");
+		if( (pthread_create(&threads[v], NULL, (void *(*)(void *)) md_worker, NULL)) < 0) {
+			md_fatal("thread pool spawn failure");
 		}
 	}
 
@@ -78,26 +73,31 @@ int main(int argc, char *argv[]){
 
 	default_loop = EV_DEFAULT;
 
-	ev_io_init(&w_listen, md_accept_cb, listen_sd, EV_READ);
-	ev_io_start(default_loop, &w_listen);
+	ev_signal_init(&watcher_sigint, md_int_cb, SIGINT);
+	ev_signal_start(default_loop, &watcher_sigint);
 
-	MD_LOG(LOGINFO, "entering event loop");
+	ev_io_init(&watcher_accept, md_accept_cb, listen_sd, EV_READ);
+	ev_io_start(default_loop, &watcher_accept);
+
+	#ifdef DEBUG
+	md_log(LOGDEBUG, "entering default event loop");
+	#endif
 
 	for(;;) {
 		ev_run(default_loop, 0);
 	}
-
-	MD_LOG(LOGINFO, "shutting down!");
 }
 
-void md_accept_cb(struct ev_loop *loop, ev_io* w_listen, int revents) {
+void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 	socklen_t sock_size = sizeof(struct sockaddr_in);
-	conn_data_t *new_conn = malloc(sizeof(conn_data_t));
+	conn_data *new_conn = malloc(sizeof(conn_data));
 
 	if( (new_conn->open_sd = accept(listen_sd, (struct sockaddr *) &(new_conn->conn_info), &sock_size)) < 0) {
-		md_panic("connection accept failure from client %s", inet_ntoa(new_conn->conn_info.sin_addr));
+		md_fatal("connection accept failure from client %s", inet_ntoa(new_conn->conn_info.sin_addr));
 	} else {
-		MD_LOG(LOGINFO, "accepted connection from client %s", inet_ntoa(new_conn->conn_info.sin_addr));
+		#ifdef DEBUG
+		md_log(LOGDEBUG, "accepted connection from client %s", inet_ntoa(new_conn->conn_info.sin_addr));
+		#endif
 	}
 
 	sem_wait(sem_q_empty);
@@ -105,11 +105,18 @@ void md_accept_cb(struct ev_loop *loop, ev_io* w_listen, int revents) {
 	STAILQ_INSERT_TAIL(&conn_q_head, new_conn, conn_q_next);
 	pthread_mutex_unlock(&mtx_conn_queue);
 	sem_post(sem_q_full);
-	MD_LOG(LOGINFO, "queued new connection");
+	#ifdef DEBUG
+	md_log(LOGDEBUG, "queued new connection");
+	#endif
 }
 
-/* error handler. whole program dies on main thread md_panic, worker dies on worker thread md_panic. */
-void md_panic(const char* message, ...) {
+void md_int_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
+	md_log(LOGINFO, "Shutting down!");
+	exit(0);
+}
+
+/* spoilers: everyone dies */
+void md_fatal(const char* message, ...) {
     if( LOGPANIC <= log_level) {
         //enter log output critical section
         pthread_mutex_lock(&mtx_term);

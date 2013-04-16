@@ -3,7 +3,7 @@
  * You can redistribute it and/or modify it under the same terms as Ruby.
  */
 
-#include "parser.h"
+#include "midnight_parser.h"
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -37,25 +37,25 @@
 
 	action write_value {
 		if (parser->http_field != NULL) {
-		  parser->md_http_field(parser->data, PTR_TO(field_start), parser->field_len, PTR_TO(mark), LEN(mark, fpc));
+		  parser->http_field(parser->data, PTR_TO(field_start), parser->field_len, PTR_TO(mark), LEN(mark, fpc));
 		}
 	}
 
 	action request_method {
 		if (parser->request_method != NULL) {
-			parser->md_request_method(parser->data, PTR_TO(mark), LEN(mark, fpc));
+			parser->request_method(parser->data, PTR_TO(mark), LEN(mark, fpc));
 		}
 	}
 
 	action request_uri {
 		if (parser->request_uri != NULL) {
-			parser->md_request_uri(parser->data, PTR_TO(mark), LEN(mark, fpc));
+			parser->request_uri(parser->data, PTR_TO(mark), LEN(mark, fpc));
 		}
 	}
 
 	action fragment {
 		if (parser->fragment != NULL) {
-			parser->md_fragment(parser->data, PTR_TO(mark), LEN(mark, fpc));
+			parser->fragment(parser->data, PTR_TO(mark), LEN(mark, fpc));
 		}
 	}
 
@@ -65,26 +65,26 @@
 
 	action query_string {
 		if (parser->query_string != NULL) {
-			parser->md_query_string(parser->data, PTR_TO(query_start), LEN(query_start, fpc));
+			parser->query_string(parser->data, PTR_TO(query_start), LEN(query_start, fpc));
 		}
 	}
 
 	action http_version {
 		if (parser->http_version != NULL) {
-		  parser->md_http_version(parser->data, PTR_TO(mark), LEN(mark, fpc));
+		  parser->http_version(parser->data, PTR_TO(mark), LEN(mark, fpc));
 		}
 	}
 
 	action request_path {
 		if (parser->request_path != NULL) {
-		  parser->md_request_path(parser->data, PTR_TO(mark), LEN(mark,fpc));
+		  parser->request_path(parser->data, PTR_TO(mark), LEN(mark,fpc));
 		}
 	}
 
 	action done {
 		parser->body_start = fpc - buffer + 1;
 		if (parser->header_done != NULL) {
-			parser->md_header_done(parser->data, fpc + 1, pe - fpc - 1);
+			parser->header_done(parser->data, fpc + 1, pe - fpc - 1);
 		}
 		fbreak;
 	}
@@ -179,146 +179,35 @@ int http_parser_is_finished(http_parser *parser) {
   return parser->cs == http_parser_first_final;
 }
 
-static void http_field(void *data, const char *field, size_t flen, const char *value, size_t vlen)
-{
-  char *ch, *end;
-  VALUE req = (VALUE)data;
-  VALUE v = Qnil;
-  VALUE f = Qnil;
+/* header parser function */
+void md_http_field(void *data, const char *field, size_t flen, const char *value, size_t vlen) {
 
-  VALIDATE_MAX_LENGTH(flen, FIELD_NAME);
-  VALIDATE_MAX_LENGTH(vlen, FIELD_VALUE);
-
-  v = rb_str_new(value, vlen);
-  f = rb_str_dup(global_http_prefix);
-  f = rb_str_buf_cat(f, field, flen);
-
-  for(ch = RSTRING_PTR(f) + RSTRING_LEN(global_http_prefix), end = RSTRING_PTR(f) + RSTRING_LEN(f); ch < end; ch++) {
-	if(*ch == '-') {
-	  *ch = '_';
-	} else {
-	  *ch = toupper(*ch);
-	}
-  }
-
-  rb_hash_aset(req, f, v);
 }
 
 void md_request_method(void *data, const char *at, size_t length) {
-  VALUE req = (VALUE)data;
-  VALUE val = Qnil;
 
-  val = rb_str_new(at, length);
-  rb_hash_aset(req, global_request_method, val);
 }
 
-static void request_uri(void *data, const char *at, size_t length)
-{
-  VALUE req = (VALUE)data;
-  VALUE val = Qnil;
+void md_request_uri(void *data, const char *at, size_t length) {
 
-  VALIDATE_MAX_LENGTH(length, REQUEST_URI);
-
-  val = rb_str_new(at, length);
-  rb_hash_aset(req, global_request_uri, val);
 }
 
-static void fragment(void *data, const char *at, size_t length)
-{
-  VALUE req = (VALUE)data;
-  VALUE val = Qnil;
+void md_fragment(void *data, const char *at, size_t length) {
 
-  VALIDATE_MAX_LENGTH(length, FRAGMENT);
-
-  val = rb_str_new(at, length);
-  rb_hash_aset(req, global_fragment, val);
 }
 
-static void request_path(void *data, const char *at, size_t length)
-{
-  VALUE req = (VALUE)data;
-  VALUE val = Qnil;
+void md_request_path(void *data, const char *at, size_t length) {
 
-  VALIDATE_MAX_LENGTH(length, REQUEST_PATH);
-
-  val = rb_str_new(at, length);
-  rb_hash_aset(req, global_request_path, val);
-  rb_hash_aset(req, global_path_info, val);
 }
 
-static void query_string(void *data, const char *at, size_t length)
-{
-  VALUE req = (VALUE)data;
-  VALUE val = Qnil;
+void md_query_string(void *data, const char *at, size_t length) {
 
-  VALIDATE_MAX_LENGTH(length, QUERY_STRING);
-
-  val = rb_str_new(at, length);
-  rb_hash_aset(req, global_query_string, val);
 }
 
-static void http_version(void *data, const char *at, size_t length)
-{
-  VALUE req = (VALUE)data;
-  VALUE val = rb_str_new(at, length);
-  rb_hash_aset(req, global_http_version, val);
+void md_http_version(void *data, const char *at, size_t length) {
+
 }
 
-/** Finalizes the request header to have a bunch of stuff that's
-  needed. */
+void md_header_done(void *data, const char *at, size_t length) {
 
-static void header_done(void *data, const char *at, size_t length)
-{
-  VALUE req = (VALUE)data;
-  VALUE temp = Qnil;
-  VALUE ctype = Qnil;
-  VALUE clen = Qnil;
-  VALUE body = Qnil;
-  char *colon = NULL;
-
-  clen = rb_hash_aref(req, global_http_content_length);
-  if(clen != Qnil) {
-	rb_hash_aset(req, global_content_length, clen);
-	rb_hash_delete(req, global_http_content_length);
-  }
-
-  ctype = rb_hash_aref(req, global_http_content_type);
-  if(ctype != Qnil) {
-	rb_hash_aset(req, global_content_type, ctype);
-	rb_hash_delete(req, global_http_content_type);
-  }
-
-  rb_hash_aset(req, global_gateway_interface, global_gateway_interface_value);
-  if((temp = rb_hash_aref(req, global_http_host)) != Qnil) {
-	/* ruby better close strings off with a '\0' dammit */
-	colon = strchr(RSTRING_PTR(temp), ':');
-	if(colon != NULL) {
-	  rb_hash_aset(req, global_server_name, rb_str_substr(temp, 0, colon - RSTRING_PTR(temp)));
-	  rb_hash_aset(req, global_server_port,
-		  rb_str_substr(temp, colon - RSTRING_PTR(temp)+1,
-			RSTRING_LEN(temp)));
-	} else {
-	  rb_hash_aset(req, global_server_name, temp);
-	  rb_hash_aset(req, global_server_port, global_port_80);
-	}
-  }
-
-  /* grab the initial body and stuff it into the hash */
-  if(length > 0) {
-	body = rb_hash_aref(req, global_http_body);
-	rb_io_write(body, rb_str_new(at, length));
-  }
-
-  /* according to Rack specs, query string must be empty string if none */
-  if (rb_hash_aref(req, global_query_string) == Qnil) {
-	rb_hash_aset(req, global_query_string, global_empty);
-  }
-	if (rb_hash_aref(req, global_path_info) == Qnil) {
-		rb_hash_aset(req, global_path_info, global_empty);
-	}
-
-	/* set some constants */
-	rb_hash_aset(req, global_server_protocol, global_server_protocol_value);
-	rb_hash_aset(req, global_url_scheme, global_url_scheme_value);
-	rb_hash_aset(req, global_script_name, global_empty);
 }

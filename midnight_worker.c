@@ -9,45 +9,65 @@ All rights reserved
 
 #include "midnight.h"
 
-void md_worker(thread_info_t *t_info) {
-    conn_data_t *conn;
+void md_worker() {
+    conn_data *conn;
     time_t ticks;
-    http_parser_t parser;
+    response res;
+    request req;
+    int nread;
+    http_parser parser;
     http_parser_alloc(&parser);
 
     for(;;) {
         #ifdef DEBUG
-        MD_LOG(LOGDEBUG, "waiting for new connection");
+        md_log(LOGDEBUG, "awaiting new connection");
         #endif
-        t_info->buff_dex = 0;
+
+        res.buffer_index = 0;
+        req.buffer_index = 0;
+        nread = 0;
         http_parser_init(&parser);
 
-
+        /*  wait for the sem_q_full semaphore; posting means a connection has been queued
+            proceed to lock queue, pull connection off, unlock, and post to sem_q_empty */
         sem_wait(sem_q_full);
-        // acquiring the mutex means there's a connection queued and waiting to be opened
         pthread_mutex_lock(&mtx_conn_queue);
         conn = STAILQ_FIRST(&conn_q_head);
         STAILQ_REMOVE_HEAD(&conn_q_head, conn_q_next);
         pthread_mutex_unlock(&mtx_conn_queue);
-        // pull the connection info off and release the mutex, don't waste time
         sem_post(sem_q_empty);
 
-        MD_LOG(LOGDEBUG, "pulled new connection to client %s", inet_ntoa(conn->conn_info.sin_addr));
+        #ifdef DEBUG
+        md_log(LOGDEBUG, "pulled new connection to client %s", inet_ntoa(conn->conn_info.sin_addr));
+        #endif
+
+        /* parse the request with Shaw's parser */
+        do {
+            md_req_read(&res, conn);
+            /* TODO replace assert here with handler in case request is larger than REQSIZE */
+            assert( req.buffer_index <= REQSIZE - 1);
+            nread += http_parser_execute(&parser, req.buffer, req.buffer_index, nread);
+        } while(!http_parser_is_finished(&parser));
+
+        assert(!http_parser_has_error(&parser));
+
+        #ifdef DEBUG
+        md_log(LOGDEBUG, "nread = %d, req.buffer_index = %d", nread, req.buffer_index);
+        md_log(LOGDEBUG, "connection read %d bytes as request:\n%s", req.buffer_index, req.buffer);
+        #endif
 
         ticks = time(NULL);
 
-        /* handle connection here: parse request & send response */
+        md_res_buff(&res, "%s %s%s", HTTP11_R, OK_S, CRLF);
+        md_res_buff(&res, "%s %s %s%s", CONTENT_H, MIME_HTML, CHARSET, CRLF);
+        md_res_buff(&res, "%s %.24s%s", DATE_H, ctime(&ticks), CRLF);
+        md_res_buff(&res, "%s %s%s", EXPIRES_H, EXPIRESNEVER, CRLF);
+        md_res_buff(&res, "%s %s%s", SERVER_H, SERVERNAME, CRLF);
+        md_res_buff(&res, "%s %s%s", CONN_H, CLOSE, CRLF);
+        md_res_buff(&res, "%s", CRLF);
+        md_res_buff(&res, "<html><body><p style=\"font-weight: bold\">Hello!</p></body></html>%s", CRLF);
 
-
-        assert(http_parser_finish);
-
-        MD_BUFF(t_info, "%s %s%s", HTTP11_R, OK_S, CRLF);
-        MD_BUFF(t_info, "%s%s%s%s", CONTENT_T_H, MIME_HTML, CHARSET, CRLF);
-        MD_BUFF(t_info, "%s%.24s%s", DATE_H, ctime(&ticks), CRLF);
-        MD_BUFF(t_info, "%s%s%s%s%s", EXPIRES_H, CRLF, SERVER_H, CRLF, CRLF);
-        MD_BUFF(t_info, "<html><body><p style=\"font-weight: bold\">Hello!</p></body></html>%s", CRLF);
-
-        write(conn->open_sd, t_info->buff, t_info->buff_dex);
+        md_res_write(conn, &res);
 
         close(conn->open_sd);
         free(conn);
