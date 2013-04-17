@@ -15,6 +15,7 @@ All rights reserved
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -42,7 +43,7 @@ All rights reserved
 #define REQSIZE			8 * 1024
 #define LISTENQ			1024
 #define DOCROOT			"site"
-#define MAXQUEUESIZE	16
+#define MAXQUEUESIZE	N_THREADS * 2
 
 /* error types */
 #define ERRPROG			-1
@@ -65,7 +66,7 @@ enum {
 #define PUT				"PUT"
 
 /* response types */
-#define HTTP11_R		"HTTP/1.1"
+#define HTTP11			"HTTP/1.1"
 #define OK_S			"200 OK"
 #define NF_S			"404 Not Found"
 #define NF_HTML	"<html><body><p>404	file not found.</p></body></html>"
@@ -99,20 +100,13 @@ enum {
 /* default character set */
 #define CHARSET			"charset=utf-8"
 
-/* special flags */
-#define GET_F			1 << 0
-#define OPTIONS_F		1 << 1
-#define HEAD_F			1 << 2
-#define POST_F			1 << 3
-#define PUT_F			1 << 4
-
-#define HTTP11_F		1 << 8
-
-#define HOST_F			1 << 9
-#define CONNECTION_F	1 << 10
-
 /* HTTP line terminator */
 #define CRLF "\r\n"
+
+/* header formats */
+#define HEADER_FMT		"%s %s%s"
+#define CONTENT_FMT		"%s %s %s%s"
+#define DATE_FMT		"%s %.24s%s"
 
 /* MACRO DEFINITIONS */
 /* read a message into the response buffer */
@@ -138,6 +132,18 @@ enum {
 			}	\
 		} while(0)
 #endif
+
+/* spoilers: everyone dies */
+#define md_fatal(m, ...)	\
+		do {	\
+		    if(LOGPANIC <= log_level) {	\
+		        pthread_mutex_lock(&mtx_term);	\
+		        fprintf(log_fd, "%u:\t", (unsigned int) pthread_self());	\
+		        fprintf(log_fd, (m), ##__VA_ARGS__);	\
+		        fprintf(log_fd, "\n");	\
+		    }	\
+		    exit(ERRPROG);	\
+		} while(0)
 
 #define md_log_init()	\
 		do {	\
@@ -173,9 +179,49 @@ enum {
             }	\
 		} while(0)
 
+#define md_req_destroy(r)	\
+		do {	\
+			http_header *s, *tmp;	\
+			HASH_ITER(hh, (r)->table, s, tmp) {	\
+				HASH_DEL((r)->table, s);	\
+				free(s->key);	\
+				free(s->value);	\
+				free(s);	\
+			}	\
+			(r)->table = NULL;	\
+			free((r)->request_method);	\
+	        free((r)->request_uri);	\
+	        free((r)->fragment);	\
+	        free((r)->request_path);	\
+	        free((r)->query_string);	\
+	        free((r)->http_version);	\
+		} while (0)
+
+typedef struct conn_data {
+    int open_sd;
+    struct sockaddr_in conn_info;
+    STAILQ_ENTRY(conn_data) conn_q_next;
+} conn_data;
+
+typedef struct http_header {
+	char* key;
+	char* value;
+	UT_hash_handle hh;
+} http_header;
+
 typedef struct response {
     char buffer[RESSIZE];
     int buffer_index;
+
+    char* content_type;
+    char* charset;
+    char* http_version;
+    char* status;
+    char* current_time;
+    char* expires;
+    char* servername;
+    char* connection;
+    char* content;				// for testing only
 
     char* file;
 	char* mimetype;
@@ -184,25 +230,16 @@ typedef struct response {
 typedef struct request {
 	char buffer[REQSIZE];
 	int buffer_index;
-	char *method;
-	char *uri;
-	char *fragment;
-	char *request_path;
-	char *query_string;
-	char *http_version;
+
+	http_header* table;
+
+	char* request_method;
+	char* request_uri;
+	char* fragment;
+	char* request_path;
+	char* query_string;
+	char* http_version;
 } request;
-
-typedef struct conn_data {
-    int open_sd;
-    struct sockaddr_in conn_info;
-    STAILQ_ENTRY(conn_data) conn_q_next;
-} conn_data;
-
-typedef struct header {
-	char *name;
-	char *value;
-	UT_hash_handle hh;
-} header;
 
 int log_level;
 int listen_sd;
@@ -214,8 +251,7 @@ sem_t* sem_q_full;
 extern STAILQ_HEAD(conn_q_head_struct, conn_data) conn_q_head;
 
 void md_worker();
-void md_fatal(const char* message, ...);
 void md_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
-void md_int_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
+void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 
 #endif /* midnight_h */

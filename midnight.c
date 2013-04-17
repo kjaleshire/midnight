@@ -73,7 +73,7 @@ int main(int argc, char *argv[]){
 
 	default_loop = EV_DEFAULT;
 
-	ev_signal_init(&watcher_sigint, md_int_cb, SIGINT);
+	ev_signal_init(&watcher_sigint, md_sigint_cb, SIGINT);
 	ev_signal_start(default_loop, &watcher_sigint);
 
 	ev_io_init(&watcher_accept, md_accept_cb, listen_sd, EV_READ);
@@ -110,25 +110,7 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 	#endif
 }
 
-void md_int_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
+void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
 	md_log(LOGINFO, "Shutting down!");
 	exit(0);
-}
-
-/* spoilers: everyone dies */
-void md_fatal(const char* message, ...) {
-    if( LOGPANIC <= log_level) {
-        //enter log output critical section
-        pthread_mutex_lock(&mtx_term);
-        #ifdef DEBUG
-        printf("%u:\t", (unsigned int) pthread_self());
-        #endif
-        va_list arglist;
-        va_start(arglist, message);
-        vfprintf(log_fd, message, arglist);
-        printf("\n");
-        va_end(arglist);
-        // leave log output critical section, no need to unlock (terminating)
-    }
-    exit(ERRPROG);
 }

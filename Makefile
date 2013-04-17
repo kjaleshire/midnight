@@ -3,9 +3,9 @@ CFLAGS=-lev
 ANALYZEFLAGS=--analyze -Wall
 DEBUGFLAGS=-O0 -g
 PRODFLAGS=-O4
-RAGEL=ragel
 SOURCEFILES=midnight.c midnight_worker.c midnight_parser.c
-SMFILES=midnight_parser.rl
+RAGEL=ragel
+RAGELFILES=midnight_parser.rl
 APPNAME=midnight
 
 all: debug
@@ -22,8 +22,8 @@ debug: $(SOURCEFILES) parser
 product: $(SOURCEFILES) parser
 	$(CC) $(CFLAGS) $(PRODFLAGS) $(SOURCEFILES) -o $(APPNAME)
 
-parser: $(PARSERFILES)
-	$(RAGEL) $(RAGELFLAGS) $(SMFILES)
+parser: $(RAGELFILES)
+	$(RAGEL) $(RAGELFLAGS) $(RAGELFILES)
 
 clean:
-	rm -rf $(APPNAME) $(APPNAME).dSYM a.out a.out.dSYM $(SOURCEFILES:.c=.plist) *.o
+	rm -rf $(APPNAME) $(APPNAME).dSYM a.out a.out.dSYM $(SOURCEFILES:.c=.plist) $(RAGELFILES:.rl=.c) *.o

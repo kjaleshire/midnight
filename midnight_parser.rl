@@ -3,12 +3,7 @@
  * You can redistribute it and/or modify it under the same terms as Ruby.
  */
 
-#include "midnight_parser.h"
-#include <stdio.h>
-#include <assert.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <string.h>
+#include "midnight.h"
 
 #define LEN(AT, FPC) (FPC - buffer - parser->AT)
 #define MARK(M,FPC) (parser->M = (FPC) - buffer)
@@ -96,7 +91,7 @@
 /** Data **/
 %% write data;
 
-void http_parser_alloc(http_parser *parser)  {
+void http_parser_init(http_parser *parser)  {
 	parser->http_field = md_http_field;
 	parser->request_method = md_request_method;
 	parser->request_uri = md_request_uri;
@@ -107,7 +102,7 @@ void http_parser_alloc(http_parser *parser)  {
 	parser->header_done = md_header_done;
 }
 
-void http_parser_init(http_parser *parser) {
+void http_parser_reset(http_parser *parser) {
 	int cs = 0;
 
 	%% write init;
@@ -180,34 +175,71 @@ int http_parser_is_finished(http_parser *parser) {
 }
 
 /* header parser function */
-void md_http_field(void *data, const char *field, size_t flen, const char *value, size_t vlen) {
+void md_http_field(void *data, const char *field, size_t flen, const char *value, size_t vlen) {;
+	http_header *new_entry = malloc(sizeof(http_header));
 
+	char *f = malloc(sizeof(char) * flen);
+	strncpy(f, field, flen);
+
+	char *v = malloc(sizeof(char) * vlen);
+	strncpy(v, value, vlen);
+
+	new_entry->key = f;
+	new_entry->value = v;
+
+	HASH_ADD_KEYPTR(hh, ((request *) data)->table, new_entry->key, strlen(new_entry->key), new_entry);
 }
 
 void md_request_method(void *data, const char *at, size_t length) {
+	request *r = (request *) data;
 
+	char *v = malloc(sizeof(char) * length);
+	strncpy(v, at, length);
+	r->request_method = v;
 }
 
 void md_request_uri(void *data, const char *at, size_t length) {
+	request *r = (request *) data;
 
+	char *v = malloc(sizeof(char) * length);
+	strncpy(v, at, length);
+	r->request_uri = v;
 }
 
 void md_fragment(void *data, const char *at, size_t length) {
+	request *r = (request *) data;
 
+	char *v = malloc(sizeof(char) * length);
+	strncpy(v, at, length);
+	r->fragment = v;
 }
 
 void md_request_path(void *data, const char *at, size_t length) {
+	request *r = (request *) data;
 
+	char *v = malloc(sizeof(char) * length);
+	strncpy(v, at, length);
+	r->request_path = v;
 }
 
 void md_query_string(void *data, const char *at, size_t length) {
+	request *r = (request *) data;
 
+	char *v = malloc(sizeof(char) * length);
+	strncpy(v, at, length);
+	r->query_string = v;
 }
 
 void md_http_version(void *data, const char *at, size_t length) {
+	request *r = (request *) data;
 
+	char *v = malloc(sizeof(char) * length);
+	strncpy(v, at, length);
+	r->http_version = v;
 }
 
 void md_header_done(void *data, const char *at, size_t length) {
-
+	#ifdef DEBUG
+	md_log(LOGDEBUG, "done parsing!");
+	#endif
 }

@@ -14,9 +14,13 @@ void md_worker() {
     time_t ticks;
     response res;
     request req;
+    req.table = NULL;
     int nread;
     http_parser parser;
-    http_parser_alloc(&parser);
+    http_parser_init(&parser);
+    parser.data = (void *) &req;
+    struct ev_loop *loop;
+    loop = ev_loop_new(EVFLAG_AUTO);
 
     for(;;) {
         #ifdef DEBUG
@@ -26,7 +30,7 @@ void md_worker() {
         res.buffer_index = 0;
         req.buffer_index = 0;
         nread = 0;
-        http_parser_init(&parser);
+        http_parser_reset(&parser);
 
         /*  wait for the sem_q_full semaphore; posting means a connection has been queued
             proceed to lock queue, pull connection off, unlock, and post to sem_q_empty */
@@ -41,35 +45,56 @@ void md_worker() {
         md_log(LOGDEBUG, "pulled new connection to client %s", inet_ntoa(conn->conn_info.sin_addr));
         #endif
 
-        /* parse the request with Shaw's parser */
+        /* validate & store the request with Shaw's parser */
         do {
-            md_req_read(&res, conn);
+            md_req_read(&req, conn);
             /* TODO replace assert here with handler in case request is larger than REQSIZE */
-            assert( req.buffer_index <= REQSIZE - 1);
+            assert(req.buffer_index < REQSIZE && "request size too large. refactor into HTTP Error 413");
             nread += http_parser_execute(&parser, req.buffer, req.buffer_index, nread);
         } while(!http_parser_is_finished(&parser));
 
         assert(!http_parser_has_error(&parser));
 
         #ifdef DEBUG
-        md_log(LOGDEBUG, "nread = %d, req.buffer_index = %d", nread, req.buffer_index);
-        md_log(LOGDEBUG, "connection read %d bytes as request:\n%s", req.buffer_index, req.buffer);
+        md_log(LOGDEBUG, "request as parsed:");
+        http_header *s, *tmp;
+        HASH_ITER(hh, req.table, s, tmp) {
+            md_log(LOGDEBUG, "%s: %s", s->key, s->value);
+        }
         #endif
 
         ticks = time(NULL);
 
-        md_res_buff(&res, "%s %s%s", HTTP11_R, OK_S, CRLF);
-        md_res_buff(&res, "%s %s %s%s", CONTENT_H, MIME_HTML, CHARSET, CRLF);
-        md_res_buff(&res, "%s %.24s%s", DATE_H, ctime(&ticks), CRLF);
-        md_res_buff(&res, "%s %s%s", EXPIRES_H, EXPIRESNEVER, CRLF);
-        md_res_buff(&res, "%s %s%s", SERVER_H, SERVERNAME, CRLF);
-        md_res_buff(&res, "%s %s%s", CONN_H, CLOSE, CRLF);
-        md_res_buff(&res, "%s", CRLF);
-        md_res_buff(&res, "<html><body><p style=\"font-weight: bold\">Hello!</p></body></html>%s", CRLF);
+        res.http_version = HTTP11;
+        res.status = OK_S;
+        res.content_type = MIME_HTML;
+        res.charset = CHARSET;
+        res.current_time = ctime(&ticks);
+        res.expires = EXPIRESNEVER;
+        res.servername = SERVERNAME;
+        res.connection = CLOSE;
+        res.content =  "<html>                                                              \
+                            <body>                                                          \
+                                <p style=\"font-weight: bold; font-size: 64px;\">           \
+                                Hello wurld!                                                \
+                                </p>                                                        \
+                            </body>                                                         \
+                        </html>%s";
+
+        md_res_buff(&res, HEADER_FMT, res.http_version, res.status, CRLF);
+        md_res_buff(&res, CONTENT_FMT, CONTENT_H, res.content_type, res.charset, CRLF);
+        md_res_buff(&res, DATE_FMT, DATE_H, res.current_time, CRLF);
+        md_res_buff(&res, HEADER_FMT, EXPIRES_H, res.expires, CRLF);
+        md_res_buff(&res, HEADER_FMT, SERVER_H, res.servername, CRLF);
+        md_res_buff(&res, HEADER_FMT, CONN_H, res.connection, CRLF);
+        md_res_buff(&res, CRLF);
+        md_res_buff(&res, res.content, CRLF);
 
         md_res_write(conn, &res);
 
         close(conn->open_sd);
         free(conn);
+
+        md_req_destroy(&req);
     }
 }
