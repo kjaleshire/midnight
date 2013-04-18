@@ -9,13 +9,12 @@ All rights reserved
 
 #include "midnight.h"
 
-void md_worker() {
+void md_worker(thread_opts *opts) {
     conn_data *conn;
     time_t ticks;
     response res;
     request req;
     req.table = NULL;
-    int nread;
     http_parser parser;
     http_parser_init(&parser);
     parser.data = (void *) &req;
@@ -27,9 +26,8 @@ void md_worker() {
         md_log(LOGDEBUG, "awaiting new connection");
         #endif
 
-        res.buffer_index = 0;
-        req.buffer_index = 0;
-        nread = 0;
+        md_res_init(&res);
+        md_req_init(&req);
         http_parser_reset(&parser);
 
         /*  wait for the sem_q_full semaphore; posting means a connection has been queued
@@ -50,16 +48,20 @@ void md_worker() {
             md_req_read(&req, conn);
             /* TODO replace assert here with handler in case request is larger than REQSIZE */
             assert(req.buffer_index < REQSIZE && "request size too large. refactor into HTTP Error 413");
-            nread += http_parser_execute(&parser, req.buffer, req.buffer_index, nread);
+            http_parser_execute(&parser, req.buffer, req.buffer_index, 0);
         } while(!http_parser_is_finished(&parser));
 
         assert(!http_parser_has_error(&parser));
 
         #ifdef DEBUG
-        md_log(LOGDEBUG, "request as parsed:");
+        md_log(LOGDEBUG, "Request URI: \"%s\"", req.request_uri);
+        md_log(LOGDEBUG, "Fragment: \"%s\"", req.fragment);
+        md_log(LOGDEBUG, "Request path: \"%s\"", req.request_path);
+        md_log(LOGDEBUG, "Query string: \"%s\"", req.query_string);
+        md_log(LOGDEBUG, "HTTP version: \"%s\"", req.http_version);
         http_header *s, *tmp;
         HASH_ITER(hh, req.table, s, tmp) {
-            md_log(LOGDEBUG, "%s: %s", s->key, s->value);
+            md_log(LOGDEBUG, "\"%s\": \"%s\"", s->key, s->value);
         }
         #endif
 
@@ -96,5 +98,13 @@ void md_worker() {
         free(conn);
 
         md_req_destroy(&req);
+        /*
+        if(sem_trywait(opts->quit) != EAGAIN) {
+            #ifdef DEBUG
+            md_log(LOGDEBUG, "thread quitting!");
+            #endif
+            int i = 0;
+            pthread_exit(&i);
+        }*/
     }
 }

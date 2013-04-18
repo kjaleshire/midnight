@@ -3,27 +3,29 @@ CFLAGS=-lev
 ANALYZEFLAGS=--analyze -Wall
 DEBUGFLAGS=-O0 -g
 PRODFLAGS=-O4
-SOURCEFILES=midnight.c midnight_worker.c midnight_parser.c
 RAGEL=ragel
+RAGELFLAGS=-G2 -C
+SOURCEFILES=$(RAGELSOURCE) midnight.c midnight_worker.c
+RAGELSOURCE=$(RAGELFILES:.rl=.c)
 RAGELFILES=midnight_parser.rl
 APPNAME=midnight
 
 all: debug
 
-$(APPNAME): $(SOURCEFILES) parser
+$(APPNAME): $(RAGELSOURCE) $(SOURCEFILES)
 	$(CC) $(CFLAGS) $(SOURCEFILES) -o $(APPNAME)
 
-analyze: $(SOURCEFILES) parser
+analyze: $(RAGELSOURCE) $(SOURCEFILES)
 	$(CC) $(CFLAGS) $(ANALYZEFLAGS) $(SOURCEFILES)
 
-debug: $(SOURCEFILES) parser
+debug: $(RAGELSOURCE) $(SOURCEFILES)
 	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(SOURCEFILES) -o $(APPNAME)
 
-product: $(SOURCEFILES) parser
+product: $(RAGELSOURCE) $(SOURCEFILES)
 	$(CC) $(CFLAGS) $(PRODFLAGS) $(SOURCEFILES) -o $(APPNAME)
 
-parser: $(RAGELFILES)
+$(RAGELSOURCE): $(RAGELFILES)
 	$(RAGEL) $(RAGELFLAGS) $(RAGELFILES)
 
 clean:
-	rm -rf $(APPNAME) $(APPNAME).dSYM a.out a.out.dSYM $(SOURCEFILES:.c=.plist) $(RAGELFILES:.rl=.c) *.o
+	rm -rf $(APPNAME) $(APPNAME).dSYM a.out a.out.dSYM $(SOURCEFILES:.c=.plist) $(RAGELSOURCE:.c=.plist) $(RAGELSOURCE) *.o

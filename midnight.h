@@ -44,6 +44,7 @@ All rights reserved
 #define LISTENQ			1024
 #define DOCROOT			"site"
 #define MAXQUEUESIZE	N_THREADS * 2
+#define TIMEFMT			"%H:%M:%S %m.%d.%y"
 
 /* error types */
 #define ERRPROG			-1
@@ -111,22 +112,26 @@ enum {
 /* MACRO DEFINITIONS */
 /* read a message into the response buffer */
 #ifdef DEBUG
-#define md_log(errlev, msg, ...)	\
+#define md_log(e, m, ...)	\
 		do {	\
-			if(errlev <= log_level) {	\
+			if((e) <= log_level) {	\
+				ticks = time(NULL);	\
+				current_time = localtime(&ticks);	\
+				strftime(timestamp, sizeof(timestamp), TIMEFMT, current_time);	\
 				pthread_mutex_lock(&mtx_term);	\
-				fprintf(log_fd, "%u: ", (unsigned int) pthread_self());	\
-				fprintf(log_fd, msg, ##__VA_ARGS__);	\
+				fprintf(log_fd, "%s  ", timestamp);	\
+				fprintf(log_fd, "%u:\t", (unsigned int) pthread_self());	\
+				fprintf(log_fd, (m), ##__VA_ARGS__);	\
 				fprintf(log_fd, "\n");	\
 				pthread_mutex_unlock(&mtx_term);	\
 			}	\
 		} while(0)
 #else
-#define md_log(errlev, msg, ...)	\
+#define md_log(e, m, ...)	\
 		do {	\
-			if(errlev <= log_level) {	\
+			if((e) <= log_level) {	\
 				pthread_mutex_lock(&mtx_term);	\
-				fprintf(log_fd, msg, ##__VA_ARGS__);	\
+				fprintf(log_fd, (m), ##__VA_ARGS__);	\
 				fprintf(log_fd, "\n");	\
 				pthread_mutex_unlock(&mtx_term);	\
 			}	\
@@ -137,10 +142,15 @@ enum {
 #define md_fatal(m, ...)	\
 		do {	\
 		    if(LOGPANIC <= log_level) {	\
+		    	ticks = time(NULL);	\
+				current_time = localtime(&ticks);	\
+				strftime(timestamp, sizeof(timestamp), TIMEFMT, current_time);	\
 		        pthread_mutex_lock(&mtx_term);	\
+		        fprintf(log_fd, "%s  ", timestamp);	\
 		        fprintf(log_fd, "%u:\t", (unsigned int) pthread_self());	\
 		        fprintf(log_fd, (m), ##__VA_ARGS__);	\
 		        fprintf(log_fd, "\n");	\
+		        pthread_mutex_unlock(&mtx_term);	\
 		    }	\
 		    exit(ERRPROG);	\
 		} while(0)
@@ -172,11 +182,39 @@ enum {
 
 #define md_req_read(r, c)	\
 		do {	\
-			if ( ((r)->buffer_index += read((c)->open_sd,	\
-			&((r)->buffer[(r)->buffer_index]),	\
-			REQSIZE - (r)->buffer_index)) < 0) {	\
+			if ( ((r)->buffer_index = read((c)->open_sd,	\
+			(r)->buffer, REQSIZE)) < 0) {	\
 				md_fatal("failed to read request from %s", inet_ntoa((c)->conn_info.sin_addr));	\
             }	\
+            (r)->buffer[(r)->buffer_index] = '\0';	\
+		} while(0)
+
+#define md_res_init(r)	\
+		do {	\
+			(r)->buffer_index = 0;	\
+			(r)->content_type = NULL;	\
+			(r)->charset = NULL;	\
+			(r)->http_version = NULL;	\
+			(r)->status = NULL;	\
+			(r)->current_time = NULL;	\
+			(r)->expires = NULL;	\
+			(r)->servername = NULL;	\
+			(r)->connection = NULL;	\
+			(r)->content = NULL;	\
+			(r)->file = NULL;	\
+			(r)->mimetype = NULL;	\
+		} while(0)
+
+#define md_req_init(r)	\
+		do {	\
+			(r)->buffer_index = 0;	\
+			(r)->table = NULL;	\
+			(r)->request_method = NULL;	\
+			(r)->request_uri = NULL;	\
+			(r)->fragment = NULL;	\
+			(r)->request_path = NULL;	\
+			(r)->query_string = NULL;	\
+			(r)->http_version = NULL;	\
 		} while(0)
 
 #define md_req_destroy(r)	\
@@ -188,13 +226,12 @@ enum {
 				free(s->value);	\
 				free(s);	\
 			}	\
-			(r)->table = NULL;	\
-			free((r)->request_method);	\
-	        free((r)->request_uri);	\
-	        free((r)->fragment);	\
-	        free((r)->request_path);	\
-	        free((r)->query_string);	\
-	        free((r)->http_version);	\
+			if((r)->request_method != NULL) free((r)->request_method);	\
+	        if((r)->request_uri != NULL) free((r)->request_uri);	\
+	        if((r)->fragment != NULL) free((r)->fragment);	\
+	        if((r)->request_path != NULL) free((r)->request_path);	\
+	        if((r)->query_string != NULL) free((r)->query_string);	\
+	        if((r)->http_version != NULL) free((r)->http_version);	\
 		} while (0)
 
 typedef struct conn_data {
@@ -241,16 +278,23 @@ typedef struct request {
 	char* http_version;
 } request;
 
+typedef struct thread_opts {
+	pthread_t thread_id;
+	sem_t* quit;
+} thread_opts;
+
 int log_level;
-int listen_sd;
 FILE *log_fd;
+time_t ticks;
+struct tm *current_time;
+char timestamp[32];
 pthread_mutex_t mtx_term;
 pthread_mutex_t mtx_conn_queue;
 sem_t* sem_q_empty;
 sem_t* sem_q_full;
 extern STAILQ_HEAD(conn_q_head_struct, conn_data) conn_q_head;
 
-void md_worker();
+void md_worker(thread_opts* opts);
 void md_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
 void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 

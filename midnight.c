@@ -12,13 +12,14 @@ All rights reserved
 #define PORT 8080
 #define ADDRESS "127.0.0.1"
 
+int listen_sd;
+thread_opts threads[N_THREADS];
 struct conn_q_head_struct conn_q_head = STAILQ_HEAD_INITIALIZER(conn_q_head);
 
 int main(int argc, char *argv[]){
 	int v;
 	int listen_address;
 	struct sockaddr_in servaddr;
-	pthread_t threads[N_THREADS];
 
 	struct ev_loop* default_loop;
 	ev_io watcher_accept;
@@ -27,18 +28,15 @@ int main(int argc, char *argv[]){
 	log_level = LOGDEBUG;
 	log_fd = stdout;
 
-	/* initialize the terminal output mutex before we start logging stuff */
 	md_log_init();
 
 	/* inet_pton(AF_INET, ADDRESS, &listen_address); */
 	listen_address = htonl(INADDR_ANY);
 
-	/* set the server listening parameters: IPv4, IP address, port number */
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = htonl(listen_address);
 	servaddr.sin_port = htons(PORT);
 
-	/* set up a new socket for us to (eventually) listen us */
 	v = 1;
 	if( (listen_sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 ||
 	#ifdef DEBUG
@@ -64,7 +62,10 @@ int main(int argc, char *argv[]){
 	}
 
 	for(v = 0; v < N_THREADS; v++) {
-		if( (pthread_create(&threads[v], NULL, (void *(*)(void *)) md_worker, NULL)) < 0) {
+		char c[8];
+		snprintf(c, sizeof(c), "tID %d", v);
+		if( (threads[v].quit = sem_open(c, O_CREAT, 0644, 0)) == SEM_FAILED ||
+			pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) md_worker, &threads[v]) < 0) {
 			md_fatal("thread pool spawn failure");
 		}
 	}
@@ -111,6 +112,13 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 }
 
 void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
+	int i;
 	md_log(LOGINFO, "Shutting down!");
+	/*for(i = 0; i < N_THREADS; i++) {
+		sem_post(threads[i].quit);
+	}
+	for(i = 0; i < N_THREADS; i++) {
+		pthread_join(threads[i].thread_id, NULL);
+	} */
 	exit(0);
 }
