@@ -1,31 +1,25 @@
 CC=clang
-CFLAGS=-lev
-ANALYZEFLAGS=--analyze -Wall
-DEBUGFLAGS=-O0 -g
-PRODFLAGS=-O4
-RAGEL=ragel
-RAGELFLAGS=-G2 -C
-SOURCEFILES=$(RAGELSOURCE) midnight.c midnight_worker.c
-RAGELSOURCE=$(RAGELFILES:.rl=.c)
-RAGELFILES=midnight_parser.rl
+CFLAGS=-lev -O4
+ANALYZEFLAGS=--analyze -Wall -lev
+DEBUGFLAGS=-O0 -g -lev
+SOURCE=$(wildcard src/*.c)
+RAGELSOURCE=src/http_parser.c src/conn_state.c
 APPNAME=midnight
 
 all: debug
 
-$(APPNAME): $(RAGELSOURCE) $(SOURCEFILES)
-	$(CC) $(CFLAGS) $(SOURCEFILES) -o $(APPNAME)
+$(APPNAME): $(RAGELSOURCE)
+	$(CC) $(CFLAGS) $(SOURCE) -o $(APPNAME)
 
-analyze: $(RAGELSOURCE) $(SOURCEFILES)
-	$(CC) $(CFLAGS) $(ANALYZEFLAGS) $(SOURCEFILES)
+analyze: $(RAGELSOURCE)
+	$(CC) $(ANALYZEFLAGS) $(SOURCE)
 
-debug: $(RAGELSOURCE) $(SOURCEFILES)
-	$(CC) $(CFLAGS) $(DEBUGFLAGS) $(SOURCEFILES) -o $(APPNAME)
+debug: $(RAGELSOURCE)
+	$(CC) $(DEBUGFLAGS) $(SOURCE) -o $(APPNAME)
 
-product: $(RAGELSOURCE) $(SOURCEFILES)
-	$(CC) $(CFLAGS) $(PRODFLAGS) $(SOURCEFILES) -o $(APPNAME)
-
-$(RAGELSOURCE): $(RAGELFILES)
-	$(RAGEL) $(RAGELFLAGS) $(RAGELFILES)
+$(RAGELSOURCE):
+	ragel -G2 src/http_parser.rl
+	ragel -G2 src/conn_state.rl
 
 clean:
 	rm -rf $(APPNAME) $(APPNAME).dSYM a.out a.out.dSYM $(SOURCEFILES:.c=.plist) $(RAGELSOURCE:.c=.plist) $(RAGELSOURCE) *.o

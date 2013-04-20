@@ -16,5 +16,6 @@
 *.out
 *.app
 
-# Scratch file
+# Specific files
 scratch.*
+*.dSYM

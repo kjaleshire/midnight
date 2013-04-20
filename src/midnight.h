@@ -32,7 +32,7 @@ All rights reserved
 #include <semaphore.h>
 #include <ev.h>					// libev event handler
 #include <sys/queue.h>			// queue macros
-#include "midnight_parser.h"	// parser header
+#include "http_parser.h"		// parser header
 #include "uthash.h"				// hash table macros
 
 /* CONSTANT DEFINITIONS */

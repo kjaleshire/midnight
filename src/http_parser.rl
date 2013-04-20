@@ -84,7 +84,7 @@
 		fbreak;
 	}
 
-	include http_parser_common "midnight_common.rl";
+	include http_parser_common "http_parser_common.rl";
 
 }%%
 
@@ -176,94 +176,81 @@ int http_parser_is_finished(http_parser *parser) {
 
 /* header parser function */
 void md_http_field(void *data, const char *field, size_t flen, const char *value, size_t vlen) {
-	if(flen > 0 && vlen > 0) {
-		http_header *new_entry = malloc(sizeof(http_header));
+	http_header *new_entry = malloc(sizeof(http_header));
 
-		char *f = malloc(sizeof(char) * (flen + 1));
-		strncpy(f, field, flen);
-		f[flen] = '\0';
+	char *f = malloc(sizeof(char) * (flen + 1));
+	strncpy(f, field, flen);
+	f[flen] = '\0';
 
-		char *v = malloc(sizeof(char) * (vlen + 1));
-		strncpy(v, value, vlen);
-		v[vlen] = '\0';
+	char *v = malloc(sizeof(char) * (vlen + 1));
+	strncpy(v, value, vlen);
+	v[vlen] = '\0';
 
-		new_entry->key = f;
-		new_entry->value = v;
+	new_entry->key = f;
+	new_entry->value = v;
+	md_log(LOGDEBUG, "f: %s, v: %s, flen: %lu, vlen: %lu", f, v, flen, vlen);
 
-		HASH_ADD_KEYPTR(hh, ((request *) data)->table, new_entry->key, strlen(new_entry->key), new_entry);
-	}
+	HASH_ADD_KEYPTR(hh, ((request *) data)->table, new_entry->key, strlen(new_entry->key), new_entry);
 }
 
 void md_request_method(void *data, const char *at, size_t length) {
-	if(length > 0) {
-		request *r = (request *) data;
+	request *r = (request *) data;
 
-		char *v = malloc(sizeof(char) * (length + 1));
-		strncpy(v, at, length);
-		v[length] = '\0';
+	char *v = malloc(sizeof(char) * (length + 1));
+	strncpy(v, at, length);
+	v[length] = '\0';
 
-		r->request_method = v;
-	}
+	r->request_method = v;
 }
 
 void md_request_uri(void *data, const char *at, size_t length) {
-	if(length > 0) {
-		request *r = (request *) data;
+	request *r = (request *) data;
 
-		char *v = malloc(sizeof(char) * (length + 1));
-		strncpy(v, at, length);
-		v[length] = '\0';
+	char *v = malloc(sizeof(char) * (length + 1));
+	strncpy(v, at, length);
+	v[length] = '\0';
 
-		r->request_uri = v;
-	}
+	r->request_uri = v;
 }
 
 void md_fragment(void *data, const char *at, size_t length) {
-	if(length > 0) {
-		request *r = (request *) data;
+	request *r = (request *) data;
 
-		char *v = malloc(sizeof(char) * (length + 1));
-		strncpy(v, at, length);
-		v[length] = '\0';
+	char *v = malloc(sizeof(char) * (length + 1));
+	strncpy(v, at, length);
+	v[length] = '\0';
 
-		r->fragment = v;
-	}
+	r->fragment = v;
 }
 
 void md_request_path(void *data, const char *at, size_t length) {
-	if(length > 0) {
-		request *r = (request *) data;
+	request *r = (request *) data;
 
-		char *v = malloc(sizeof(char) * (length + 1));
-		strncpy(v, at, length);
-		v[length] = '\0';
+	char *v = malloc(sizeof(char) * (length + 1));
+	strncpy(v, at, length);
+	v[length] = '\0';
 
-		r->request_path = v;
-	}
+	r->request_path = v;
 }
 
 void md_query_string(void *data, const char *at, size_t length) {
-	if(length > 0) {
-		request *r = (request *) data;
+	request *r = (request *) data;
 
-		char *v = malloc(sizeof(char) * (length + 1));
-		strncpy(v, at, length);
-		v[length] = '\0';
+	char *v = malloc(sizeof(char) * (length + 1));
+	strncpy(v, at, length);
+	v[length] = '\0';
 
-		r->query_string = v;
-	}
+	r->query_string = v;
 }
 
 void md_http_version(void *data, const char *at, size_t length) {
-	if(length > 0) {
-		request *r = (request *) data;
+	request *r = (request *) data;
 
-		char *v = malloc(sizeof(char) * (length + 1));
-		strncpy(v, at, length);
-		v[length] = '\0';
+	char *v = malloc(sizeof(char) * (length + 1));
+	strncpy(v, at, length);
+	v[length] = '\0';
 
-		r->http_version = v;
-	}
+	r->http_version = v;
 }
 
 void md_header_done(void *data, const char *at, size_t length) {

@@ -21,6 +21,8 @@ void md_worker(thread_opts *opts) {
     struct ev_loop *loop;
     loop = ev_loop_new(EVFLAG_AUTO);
 
+
+
     for(;;) {
         #ifdef DEBUG
         md_log(LOGDEBUG, "awaiting new connection");
@@ -107,4 +109,21 @@ void md_worker(thread_opts *opts) {
             pthread_exit(&i);
         }*/
     }
+}
+
+%%{
+    machine StateActions;
+
+    alphtype int;
+
+    action parse_init { md_parse_init(); }
+    action parse_exec { md_parse(); }
+    action read_request_method { md_request_method(); }
+    action request_not_implimented { md_request_not_implimented(); }
+    action validate_get { md_validate_get(); }
+    action send_response { md_send_response(); }
+    action send_request_invalid { md_send_request_invalid(); }
+    action cleanup { md_cleanup(); }
+
+    include ConnectionState "conn_state.rl"
 }
