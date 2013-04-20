@@ -1,7 +1,7 @@
-%% {
+%%{
 	machine ConnectionState;
 
-	import "events.h"
+	import "events.h";
 
 	connection = (
 		start: ( OPEN @parse_exec -> parse_continue ),
@@ -26,4 +26,4 @@
 	) >parse_init %cleanup;
 
 	main := (connection)*;
-}
+}%%

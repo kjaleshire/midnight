@@ -125,5 +125,7 @@ void md_worker(thread_opts *opts) {
     action send_request_invalid { md_send_request_invalid(); }
     action cleanup { md_cleanup(); }
 
-    include ConnectionState "conn_state.rl"
-}
+    include ConnectionState "conn_state.rl";
+}%%
+
+%% write data;
