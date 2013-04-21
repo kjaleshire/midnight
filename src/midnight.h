@@ -70,6 +70,7 @@ enum {
 #define HTTP11			"HTTP/1.1"
 #define OK_S			"200 OK"
 #define NF_S			"404 Not Found"
+#define SRVERR_S		"500 Internal Server Error"
 #define NF_HTML	"<html><body><p>404	file not found.</p></body></html>"
 
 /* default filename */
@@ -84,8 +85,8 @@ enum {
 #define CONN_H			"Connection:"
 
 /* header stock values	*/
-#define CLOSE			"close"
-#define KEEPALIVE		"keep-alive"
+#define CONN_CLOSE		"close"
+#define CONN_KA			"keep-alive"
 #define SERVERNAME		"midnight"
 #define EXPIRESNEVER	"-1"
 
@@ -109,8 +110,97 @@ enum {
 #define CONTENT_FMT		"%s %s %s%s"
 #define DATE_FMT		"%s %.24s%s"
 
+typedef struct conn_data {
+    int open_sd;
+    int cs;
+    struct sockaddr_in conn_info;
+    STAILQ_ENTRY(conn_data) conn_q_next;
+} conn_data;
+
+typedef struct http_header {
+	char* key;
+	char* value;
+	UT_hash_handle hh;
+} http_header;
+
+typedef struct response {
+    char buffer[RESSIZE];
+    int buffer_index;
+
+    char* content_type;
+    char* charset;
+    char* http_version;
+    char* status;
+    char* current_time;
+    char* expires;
+    char* servername;
+    char* connection;
+    char* content;				// for testing only
+
+    char* file;
+	char* mimetype;
+} response;
+
+typedef struct request {
+	char buffer[REQSIZE];
+	int buffer_index;
+
+	http_header* table;
+
+	char* request_method;
+	char* request_uri;
+	char* fragment;
+	char* request_path;
+	char* query_string;
+	char* http_version;
+} request;
+
+typedef int (*conn_state_cb)(conn_data *conn, request *req, response *res, http_parser *parser);
+
+typedef struct state_actions {
+	conn_state_cb parse_init;
+	conn_state_cb parse_exec;
+	conn_state_cb read_request_method;
+	conn_state_cb validate_get;
+	conn_state_cb send_response;
+	conn_state_cb send_request_invalid;
+	conn_state_cb cleanup;
+} state_actions;
+
+typedef struct thread_opts {
+	pthread_t thread_id;
+	sem_t* quit;
+} thread_opts;
+
+int log_level;
+FILE* log_fd;
+time_t ticks;
+struct tm *current_time;
+char timestamp[32];
+pthread_mutex_t mtx_term;
+pthread_mutex_t mtx_conn_queue;
+sem_t* sem_q_empty;
+sem_t* sem_q_full;
+extern STAILQ_HEAD(conn_q_head_struct, conn_data) conn_q_head;
+state_actions conn_actions;
+
+void md_worker(thread_opts* opts);
+
+int md_state_init(conn_data *conn, request *req, response *res, http_parser *parser);
+int md_state_change(conn_data *conn, request *req, response *res, http_parser *parser, int event);
+
+int md_parse_init(conn_data *conn, request *req, response *res, http_parser *parser);
+int md_parse_exec(conn_data *conn, request *req, response *res, http_parser *parser);
+int md_read_request_method(conn_data *conn, request *req, response *res, http_parser *parser);
+int md_validate_get(conn_data *conn, request *req, response *res, http_parser *parser);
+int md_send_response(conn_data *conn, request *req, response *res, http_parser *parser);
+int md_send_request_invalid(conn_data *conn, request *req, response *res, http_parser *parser);
+int md_cleanup(conn_data *conn, request *req, response *res, http_parser *parser);
+
+void md_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
+void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
+
 /* MACRO DEFINITIONS */
-/* read a message into the response buffer */
 #ifdef DEBUG
 #define md_log(e, m, ...)	\
 		do {	\
@@ -175,6 +265,21 @@ enum {
 
 #define md_res_write(c, r)	\
 		do {	\
+    		assert((r)->http_version != NULL && (r)->status != NULL && "HTTP version & status not set");	\
+    			md_res_buff((r), HEADER_FMT, (r)->http_version, (r)->status, CRLF);		\
+    		if((r)->content_type != NULL && (r)->charset != NULL) {		\
+    			md_res_buff((r), CONTENT_FMT, CONTENT_H, (r)->content_type, (r)->charset, CRLF); }	\
+    		if((r)->current_time != NULL) {		\
+    			md_res_buff((r), DATE_FMT, DATE_H, (r)->current_time, CRLF); }	\
+    		if((r)->expires != NULL) {	\
+    			md_res_buff((r), HEADER_FMT, EXPIRES_H, (r)->expires, CRLF); }	\
+    		if((r)->expires != NULL) {	\
+    			md_res_buff((r), HEADER_FMT, SERVER_H, (r)->servername, CRLF); }	\
+    		if((r)->connection != NULL) {	\
+    			md_res_buff((r), HEADER_FMT, CONN_H, (r)->connection, CRLF); }	\
+    		md_res_buff((r), CRLF);	\
+    		if((r)->content != NULL) {	\
+    			md_res_buff((r), (r)->content, CRLF); }		\
 			if(write((c)->open_sd, (r)->buffer, (r)->buffer_index) < 0) {	\
 				md_fatal("socket write failed");	\
 			}	\
@@ -234,68 +339,15 @@ enum {
 	        if((r)->http_version != NULL) free((r)->http_version);	\
 		} while (0)
 
-typedef struct conn_data {
-    int open_sd;
-    struct sockaddr_in conn_info;
-    STAILQ_ENTRY(conn_data) conn_q_next;
-} conn_data;
-
-typedef struct http_header {
-	char* key;
-	char* value;
-	UT_hash_handle hh;
-} http_header;
-
-typedef struct response {
-    char buffer[RESSIZE];
-    int buffer_index;
-
-    char* content_type;
-    char* charset;
-    char* http_version;
-    char* status;
-    char* current_time;
-    char* expires;
-    char* servername;
-    char* connection;
-    char* content;				// for testing only
-
-    char* file;
-	char* mimetype;
-} response;
-
-typedef struct request {
-	char buffer[REQSIZE];
-	int buffer_index;
-
-	http_header* table;
-
-	char* request_method;
-	char* request_uri;
-	char* fragment;
-	char* request_path;
-	char* query_string;
-	char* http_version;
-} request;
-
-typedef struct thread_opts {
-	pthread_t thread_id;
-	sem_t* quit;
-} thread_opts;
-
-int log_level;
-FILE *log_fd;
-time_t ticks;
-struct tm *current_time;
-char timestamp[32];
-pthread_mutex_t mtx_term;
-pthread_mutex_t mtx_conn_queue;
-sem_t* sem_q_empty;
-sem_t* sem_q_full;
-extern STAILQ_HEAD(conn_q_head_struct, conn_data) conn_q_head;
-
-void md_worker(thread_opts* opts);
-void md_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
-void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
+#define md_set_state_actions(a)	\
+		do {	\
+			(a)->parse_init = md_parse_init;	\
+			(a)->parse_exec = md_parse_exec;	\
+			(a)->read_request_method = md_read_request_method;	\
+			(a)->validate_get = md_validate_get;	\
+			(a)->send_response = md_send_response;	\
+			(a)->send_request_invalid = md_send_request_invalid;	\
+			(a)->cleanup = md_cleanup;	\
+		} while(0)
 
 #endif /* midnight_h */

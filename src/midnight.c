@@ -30,6 +30,8 @@ int main(int argc, char *argv[]){
 
 	md_log_init();
 
+	md_set_state_actions(&conn_actions);
+
 	/* inet_pton(AF_INET, ADDRESS, &listen_address); */
 	listen_address = htonl(INADDR_ANY);
 
@@ -58,7 +60,7 @@ int main(int argc, char *argv[]){
 		( (sem_q_full = sem_open("conn_full", O_CREAT, 0644, 0))
 		 == SEM_FAILED) ||
 		(pthread_mutex_init(&mtx_conn_queue, NULL) != 0 ) ) {
-			md_fatal("error creating connection queue locking mechanisms");
+			md_fatal("error creating conn_data queue locking mechanisms");
 	}
 
 	for(v = 0; v < N_THREADS; v++) {
@@ -107,7 +109,7 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 	pthread_mutex_unlock(&mtx_conn_queue);
 	sem_post(sem_q_full);
 	#ifdef DEBUG
-	md_log(LOGDEBUG, "queued new connection");
+	md_log(LOGDEBUG, "queued new conn_data");
 	#endif
 }
 

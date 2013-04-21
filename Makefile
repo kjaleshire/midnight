@@ -3,7 +3,7 @@ CFLAGS=-lev -O4
 ANALYZEFLAGS=--analyze -Wall -lev
 DEBUGFLAGS=-O0 -g -lev
 SOURCE=$(wildcard src/*.c)
-RAGELSOURCE=src/http_parser.c src/conn_state.c
+RAGELSOURCE=src/http_parser.c src/worker.c
 APPNAME=midnight
 
 all: debug
@@ -19,7 +19,7 @@ debug: $(RAGELSOURCE)
 
 $(RAGELSOURCE):
 	ragel -G2 src/http_parser.rl
-	ragel -G2 src/conn_state.rl
+	ragel -G2 src/worker.rl
 
 clean:
 	rm -rf $(APPNAME) $(APPNAME).dSYM a.out a.out.dSYM $(SOURCEFILES:.c=.plist) $(RAGELSOURCE:.c=.plist) $(RAGELSOURCE) *.o

@@ -2,8 +2,9 @@
 #define events_h
 
 typedef enum StateEvent {
+	DONE=8,
 	OPEN=9,
-	GET=10,
+	GET_REQUEST=10,
 	CLOSE=11,
 	INV_REQUEST=12,
 	PARSE=13,

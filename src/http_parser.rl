@@ -188,7 +188,6 @@ void md_http_field(void *data, const char *field, size_t flen, const char *value
 
 	new_entry->key = f;
 	new_entry->value = v;
-	md_log(LOGDEBUG, "f: %s, v: %s, flen: %lu, vlen: %lu", f, v, flen, vlen);
 
 	HASH_ADD_KEYPTR(hh, ((request *) data)->table, new_entry->key, strlen(new_entry->key), new_entry);
 }
