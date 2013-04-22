@@ -13,7 +13,7 @@ All rights reserved
 #define ADDRESS "127.0.0.1"
 
 int listen_sd;
-thread_opts threads[N_THREADS];
+thread_info threads[N_THREADS];
 struct conn_q_head_struct conn_q_head = STAILQ_HEAD_INITIALIZER(conn_q_head);
 
 int main(int argc, char *argv[]){
@@ -22,15 +22,15 @@ int main(int argc, char *argv[]){
 	struct sockaddr_in servaddr;
 
 	struct ev_loop* default_loop;
-	ev_io watcher_accept;
-	ev_signal watcher_sigint;
+	ev_io* watcher_accept = malloc(sizeof(ev_io));
+	ev_signal* watcher_sigint = malloc(sizeof(ev_signal));
 
-	log_level = LOGDEBUG;
-	log_fd = stdout;
+	queue_info.mtx_conn_queue = malloc(sizeof(pthread_mutex_t));
+
+	log_info.log_level = LOGDEBUG;
 
 	md_log_init();
-
-	md_set_state_actions(&conn_actions);
+	md_set_state_actions(&state_actions);
 
 	/* inet_pton(AF_INET, ADDRESS, &listen_address); */
 	listen_address = htonl(INADDR_ANY);
@@ -56,10 +56,10 @@ int main(int argc, char *argv[]){
 		#endif
 	}
 
-	if( ( (sem_q_empty = sem_open("conn_empty", O_CREAT, 0644, MAXQUEUESIZE)) == SEM_FAILED) ||
-		( (sem_q_full = sem_open("conn_full", O_CREAT, 0644, 0))
+	if( ( (queue_info.sem_q_empty = sem_open("conn_empty", O_CREAT, 0644, MAXQUEUESIZE)) == SEM_FAILED) ||
+		( (queue_info.sem_q_full = sem_open("conn_full", O_CREAT, 0644, 0))
 		 == SEM_FAILED) ||
-		(pthread_mutex_init(&mtx_conn_queue, NULL) != 0 ) ) {
+		(pthread_mutex_init(queue_info.mtx_conn_queue, NULL) != 0 ) ) {
 			md_fatal("error creating conn_data queue locking mechanisms");
 	}
 
@@ -76,11 +76,11 @@ int main(int argc, char *argv[]){
 
 	default_loop = EV_DEFAULT;
 
-	ev_signal_init(&watcher_sigint, md_sigint_cb, SIGINT);
-	ev_signal_start(default_loop, &watcher_sigint);
+	ev_signal_init(watcher_sigint, md_sigint_cb, SIGINT);
+	ev_signal_start(default_loop, watcher_sigint);
 
-	ev_io_init(&watcher_accept, md_accept_cb, listen_sd, EV_READ);
-	ev_io_start(default_loop, &watcher_accept);
+	ev_io_init(watcher_accept, md_accept_cb, listen_sd, EV_READ);
+	ev_io_start(default_loop, watcher_accept);
 
 	#ifdef DEBUG
 	md_log(LOGDEBUG, "entering default event loop");
@@ -103,11 +103,11 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 		#endif
 	}
 
-	sem_wait(sem_q_empty);
-	pthread_mutex_lock(&mtx_conn_queue);
+	sem_wait(queue_info.sem_q_empty);
+	pthread_mutex_lock(queue_info.mtx_conn_queue);
 	STAILQ_INSERT_TAIL(&conn_q_head, new_conn, conn_q_next);
-	pthread_mutex_unlock(&mtx_conn_queue);
-	sem_post(sem_q_full);
+	pthread_mutex_unlock(queue_info.mtx_conn_queue);
+	sem_post(queue_info.sem_q_full);
 	#ifdef DEBUG
 	md_log(LOGDEBUG, "queued new conn_data");
 	#endif

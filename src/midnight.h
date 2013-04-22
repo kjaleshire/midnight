@@ -30,6 +30,7 @@ All rights reserved
 #include <assert.h>
 #include <time.h>
 #include <semaphore.h>
+#include <copyfile.h>
 #include <ev.h>					// libev event handler
 #include <sys/queue.h>			// queue macros
 #include "http_parser.h"		// parser header
@@ -155,36 +156,41 @@ typedef struct request {
 	char* http_version;
 } request;
 
+typedef struct thread_info {
+	pthread_t thread_id;
+	sem_t* quit;
+} thread_info;
+
 typedef int (*conn_state_cb)(conn_data *conn, request *req, response *res, http_parser *parser);
 
-typedef struct state_actions {
+struct {
 	conn_state_cb parse_init;
 	conn_state_cb parse_exec;
 	conn_state_cb read_request_method;
 	conn_state_cb validate_get;
-	conn_state_cb send_response;
+	conn_state_cb send_get_response;
 	conn_state_cb send_request_invalid;
+	conn_state_cb send_404_response;
 	conn_state_cb cleanup;
 } state_actions;
 
-typedef struct thread_opts {
-	pthread_t thread_id;
-	sem_t* quit;
-} thread_opts;
+struct {
+	sem_t* sem_q_empty;
+	sem_t* sem_q_full;
+	pthread_mutex_t* mtx_conn_queue;
+} queue_info;
 
-int log_level;
-FILE* log_fd;
-time_t ticks;
-struct tm *current_time;
-char timestamp[32];
-pthread_mutex_t mtx_term;
-pthread_mutex_t mtx_conn_queue;
-sem_t* sem_q_empty;
-sem_t* sem_q_full;
+struct {
+	int log_level;
+	char timestamp[32];
+	time_t ticks;
+	struct tm* current_time;
+	pthread_mutex_t mtx_term;
+} log_info;
+
 extern STAILQ_HEAD(conn_q_head_struct, conn_data) conn_q_head;
-state_actions conn_actions;
 
-void md_worker(thread_opts* opts);
+void md_worker(thread_info* opts);
 
 int md_state_init(conn_data *conn, request *req, response *res, http_parser *parser);
 int md_state_change(conn_data *conn, request *req, response *res, http_parser *parser, int event);
@@ -193,8 +199,9 @@ int md_parse_init(conn_data *conn, request *req, response *res, http_parser *par
 int md_parse_exec(conn_data *conn, request *req, response *res, http_parser *parser);
 int md_read_request_method(conn_data *conn, request *req, response *res, http_parser *parser);
 int md_validate_get(conn_data *conn, request *req, response *res, http_parser *parser);
-int md_send_response(conn_data *conn, request *req, response *res, http_parser *parser);
+int md_send_get_response(conn_data *conn, request *req, response *res, http_parser *parser);
 int md_send_request_invalid(conn_data *conn, request *req, response *res, http_parser *parser);
+int md_send_404_response(conn_data *conn, request *req, response *res, http_parser *parser);
 int md_cleanup(conn_data *conn, request *req, response *res, http_parser *parser);
 
 void md_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
@@ -202,28 +209,30 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 
 /* MACRO DEFINITIONS */
 #ifdef DEBUG
+#define LOG_FD stdout
 #define md_log(e, m, ...)	\
 		do {	\
-			if((e) <= log_level) {	\
-				ticks = time(NULL);	\
-				current_time = localtime(&ticks);	\
-				strftime(timestamp, sizeof(timestamp), TIMEFMT, current_time);	\
-				pthread_mutex_lock(&mtx_term);	\
-				fprintf(log_fd, "%s  ", timestamp);	\
-				fprintf(log_fd, "%u:\t", (unsigned int) pthread_self());	\
-				fprintf(log_fd, (m), ##__VA_ARGS__);	\
-				fprintf(log_fd, "\n");	\
-				pthread_mutex_unlock(&mtx_term);	\
+			if((e) <= log_info.log_level) {	\
+				log_info.ticks = time(NULL);	\
+				log_info.current_time = localtime(&log_info.ticks);	\
+				strftime(log_info.timestamp, sizeof(log_info.timestamp), TIMEFMT, log_info.current_time);	\
+				pthread_mutex_lock(&log_info.mtx_term);	\
+				fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
+				fprintf(LOG_FD, "%u:\t", (unsigned int) pthread_self());	\
+				fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
+				fprintf(LOG_FD, "\n");	\
+				pthread_mutex_unlock(&log_info.mtx_term);	\
 			}	\
 		} while(0)
 #else
+#define LOG_FD stdout
 #define md_log(e, m, ...)	\
 		do {	\
-			if((e) <= log_level) {	\
-				pthread_mutex_lock(&mtx_term);	\
-				fprintf(log_fd, (m), ##__VA_ARGS__);	\
-				fprintf(log_fd, "\n");	\
-				pthread_mutex_unlock(&mtx_term);	\
+			if((e) <= log_info.log_level) {	\
+				pthread_mutex_lock(&log_info.mtx_term);	\
+				fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
+				fprintf(LOG_FD, "\n");	\
+				pthread_mutex_unlock(&log_info.mtx_term);	\
 			}	\
 		} while(0)
 #endif
@@ -231,16 +240,16 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 /* spoilers: everyone dies */
 #define md_fatal(m, ...)	\
 		do {	\
-		    if(LOGPANIC <= log_level) {	\
-		    	ticks = time(NULL);	\
-				current_time = localtime(&ticks);	\
-				strftime(timestamp, sizeof(timestamp), TIMEFMT, current_time);	\
-		        pthread_mutex_lock(&mtx_term);	\
-		        fprintf(log_fd, "%s  ", timestamp);	\
-		        fprintf(log_fd, "%u:\t", (unsigned int) pthread_self());	\
-		        fprintf(log_fd, (m), ##__VA_ARGS__);	\
-		        fprintf(log_fd, "\n");	\
-		        pthread_mutex_unlock(&mtx_term);	\
+		    if(LOGPANIC <= log_info.log_level) {	\
+		    	log_info.ticks = time(NULL);	\
+				log_info.current_time = localtime(&log_info.ticks);	\
+				strftime(log_info.timestamp, sizeof(log_info.timestamp), TIMEFMT, log_info.current_time);	\
+		        pthread_mutex_lock(&log_info.mtx_term);	\
+		        fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
+		        fprintf(LOG_FD, "%u:\t", (unsigned int) pthread_self());	\
+		        fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
+		        fprintf(LOG_FD, "\n");	\
+		        pthread_mutex_unlock(&log_info.mtx_term);	\
 		    }	\
 		    exit(ERRPROG);	\
 		} while(0)
@@ -250,7 +259,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 			pthread_mutexattr_t mtx_attr;	\
     		if( pthread_mutexattr_init(&mtx_attr) != 0 ||	\
 	        pthread_mutexattr_settype(&mtx_attr, PTHREAD_MUTEX_RECURSIVE) != 0 ||	\
-	        pthread_mutex_init(&mtx_term, &mtx_attr) != 0 ) {	\
+	        pthread_mutex_init(&log_info.mtx_term, &mtx_attr) != 0 ) {	\
 	            printf("System error: unable to initialize terminal mutex");	\
 	            exit(ERRSYS);	\
         	}	\
@@ -345,8 +354,9 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 			(a)->parse_exec = md_parse_exec;	\
 			(a)->read_request_method = md_read_request_method;	\
 			(a)->validate_get = md_validate_get;	\
-			(a)->send_response = md_send_response;	\
+			(a)->send_get_response = md_send_get_response;	\
 			(a)->send_request_invalid = md_send_request_invalid;	\
+			(a)->send_404_response = md_send_404_response;	\
 			(a)->cleanup = md_cleanup;	\
 		} while(0)
 

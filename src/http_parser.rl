@@ -225,9 +225,11 @@ void md_fragment(void *data, const char *at, size_t length) {
 void md_request_path(void *data, const char *at, size_t length) {
 	request *r = (request *) data;
 
-	char *v = malloc(sizeof(char) * (length + 1));
-	strncpy(v, at, length);
-	v[length] = '\0';
+	// allocate enough space to quickly prepend a '.' and append the NULL terminator and default filename if necessary
+	char *v = malloc(sizeof(char) * (length + 2 + strlen(DEFAULT_FILE)));
+	strncpy(&(v[1]), at, length);  // offset by one so we can quickly prepend '.'
+	v[length + 1] = '\0';
+	v[0] = '.';
 
 	r->request_path = v;
 }

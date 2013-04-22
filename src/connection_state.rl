@@ -20,8 +20,9 @@
 		),
 
 		get_validating: (
-			GET_VALID @send_response -> close	|
-			GET_NOT_VALID @send_request_invalid -> close
+			GET_VALID @send_get_response -> close	|
+			GET_NOT_VALID @send_request_invalid -> close	|
+			GET_NOT_FOUND @send_404_response -> close
 		)
 
 		close: (

@@ -11,9 +11,9 @@ All rights reserved
 #include "events.h"
 
 #ifdef DEBUG
-#define CALL(A) md_log(LOGDEBUG, "event: %d", event); next = conn_actions.A(conn, req, res, parser)
+#define CALL(A) md_log(LOGDEBUG, "event: %d", event); next = state_actions.A(conn, req, res, parser)
 #else
-#define CALL(A) next = conn_actions.A(conn, req, res, parser)
+#define CALL(A) next = state_actions.A(conn, req, res, parser)
 #endif
 
 %%{
@@ -27,11 +27,12 @@ All rights reserved
     action parse_exec { CALL(parse_exec); }
     action read_request_method { CALL(read_request_method); }
     action validate_get { CALL(validate_get); }
-    action send_response { CALL(send_response); }
+    action send_get_response { CALL(send_get_response); }
     action send_request_invalid { CALL(send_request_invalid); }
+    action send_404_response { CALL(send_404_response); }
     action cleanup { CALL(cleanup); }
 
-    include ConnectionState "conn_state.rl";
+    include ConnectionState "connection_state.rl";
 }%%
 
 %% write data;
@@ -42,7 +43,7 @@ response* res;
 http_parser* parser;
 struct ev_loop *loop;               // local thread loop (for timeouts and such)
 
-void md_worker(thread_opts *opts) {
+void md_worker(thread_info *opts) {
     req = malloc(sizeof(request));
 
     res = malloc(sizeof(response));
@@ -51,23 +52,21 @@ void md_worker(thread_opts *opts) {
     http_parser_init(parser);
     parser->data = (void *) req;
 
-
-
     loop = ev_loop_new(EVFLAG_AUTO);
 
-    while(1) {
+    for(;;) {
         #ifdef DEBUG
         md_log(LOGDEBUG, "awaiting new connection");
         #endif
 
         /*  wait for the sem_q_full semaphore; posting means a conn_data has been queued
             proceed to lock queue, pull conn_data off, unlock, and post to sem_q_empty */
-        sem_wait(sem_q_full);
-        pthread_mutex_lock(&mtx_conn_queue);
+        sem_wait(queue_info.sem_q_full);
+        pthread_mutex_lock(queue_info.mtx_conn_queue);
         conn = STAILQ_FIRST(&conn_q_head);
         STAILQ_REMOVE_HEAD(&conn_q_head, conn_q_next);
-        pthread_mutex_unlock(&mtx_conn_queue);
-        sem_post(sem_q_empty);
+        pthread_mutex_unlock(queue_info.mtx_conn_queue);
+        sem_post(queue_info.sem_q_empty);
 
         #ifdef DEBUG
         md_log(LOGDEBUG, "pulled new conn_data to client %s", inet_ntoa(conn->conn_info.sin_addr));
@@ -77,7 +76,7 @@ void md_worker(thread_opts *opts) {
 
         md_state_init(conn, req, res, parser);
 
-        while(1) {
+        for(;;) {
 
             if(next == DONE) break;
             next = md_state_change(conn, req, res, parser, next);
@@ -105,7 +104,6 @@ int md_state_change(conn_data *conn, request *req, response *res, http_parser *p
 
     const int *p = event_queue;
     const int *pe = p+1;
-    const int *eof = event == CLOSE ? pe : NULL;
 
     %% write exec;
 
@@ -144,16 +142,23 @@ int md_parse_exec(conn_data *conn, request *req, response *res, http_parser *par
 
 int md_read_request_method(conn_data *conn, request *req, response *res, http_parser *parser) {
     #ifdef DEBUG
-    md_log(LOGDEBUG, "Request URI: \"%s\"", req->request_uri);
-    md_log(LOGDEBUG, "Fragment: \"%s\"", req->fragment);
-    md_log(LOGDEBUG, "Request path: \"%s\"", req->request_path);
-    md_log(LOGDEBUG, "Query string: \"%s\"", req->query_string);
-    md_log(LOGDEBUG, "HTTP version: \"%s\"", req->http_version);
+    md_log(LOGDEBUG, "Request URI: %s", req->request_uri);
+    md_log(LOGDEBUG, "Fragment: %s", req->fragment);
+    md_log(LOGDEBUG, "Request path: %s", req->request_path);
+    md_log(LOGDEBUG, "Query string: %s", req->query_string);
+    md_log(LOGDEBUG, "HTTP version: %s", req->http_version);
     http_header *s, *tmp;
     HASH_ITER(hh, req->table, s, tmp) {
-        md_log(LOGDEBUG, "\"%s\": \"%s\"", s->key, s->value);
+        md_log(LOGDEBUG, "%s: %s", s->key, s->value);
     }
     #endif
+
+    time_t ticks = time(NULL);
+
+    res->http_version = HTTP11;
+    res->current_time = ctime(&ticks);
+    res->servername = SERVERNAME;
+    res->connection = CONN_CLOSE;
 
     if(strcmp(req->request_method, GET) == 0) {
         return GET_REQUEST;
@@ -163,16 +168,13 @@ int md_read_request_method(conn_data *conn, request *req, response *res, http_pa
 }
 
 int md_send_request_invalid(conn_data *conn, request *req, response *res, http_parser *parser) {
+    md_log(LOGDEBUG, "500 Internal Server Error");
+
     time_t ticks = time(NULL);
 
-    res->http_version = HTTP11;
     res->status = SRVERR_S;
     res->content_type = MIME_HTML;
     res->charset = CHARSET;
-    res->current_time = ctime(&ticks);
-    res->expires = EXPIRESNEVER;
-    res->servername = SERVERNAME;
-    res->connection = CONN_CLOSE;
     res->content =  "<html>                                                              \
                         <body>                                                          \
                             <p style=\"font-weight: bold; font-size: 14px; text-align: center;\">           \
@@ -187,28 +189,70 @@ int md_send_request_invalid(conn_data *conn, request *req, response *res, http_p
 }
 
 int md_validate_get(conn_data *conn, request *req, response *res, http_parser *parser) {
-    // for testing right now.
+    if(req->request_path[strlen(req->request_path) - 1] == '/') {
+        char *s = malloc(sizeof(char) * (strlen(req->request_path) + strlen(DEFAULT_FILE)));
+        s[0] = '\0';
+        strcpy(s, req->request_path);
+        strcpy(&s[strlen(s)], DEFAULT_FILE);
+        free(req->request_path);
+        req->request_path = s;
+    }
+
+    time_t ticks = time(NULL);
+
+    if(req->request_path == NULL || req->request_uri == NULL) {
+        return GET_NOT_VALID;
+    } else if (stat(req->request_path, NULL) < 0 && errno == ENOENT) {
+        return GET_NOT_FOUND;
+    }
+
     return GET_VALID;
 }
 
-int md_send_response(conn_data *conn, request *req, response *res, http_parser *parser) {
-    res->http_version = HTTP11;
+int md_send_get_response(conn_data *conn, request *req, response *res, http_parser *parser) {
+    md_log(LOGDEBUG, "200 OK");
+
+    int file_fd;
+    copyfile_state_t copyfile_state;
+
     res->status = OK_S;
     res->content_type = MIME_HTML;
     res->charset = CHARSET;
-    res->current_time = ctime(&ticks);
     res->expires = EXPIRESNEVER;
-    res->servername = SERVERNAME;
-    res->connection = CONN_CLOSE;
-    res->content =  "<html>                                                              \
+
+    md_res_write(conn, res);
+
+    if( (file_fd = open(req->request_path, O_RDONLY)) < 0 ) {
+       md_fatal("error opening file: %s", req->request_path);
+    }
+
+    copyfile_state = copyfile_state_alloc();
+
+    if( fcopyfile(file_fd, conn->open_sd, copyfile_state, COPYFILE_DATA) < 0 ) {
+        md_log(LOGDEBUG, "copy file failed");
+    }
+
+    copyfile_state_free(copyfile_state);
+
+    close(file_fd);
+
+    return CLOSE;
+}
+
+int md_send_404_response(conn_data *conn, request *req, response *res, http_parser *parser) {
+    md_log(LOGDEBUG, "404 Not Found");
+
+    res->status = NF_S;
+    res->content_type = MIME_HTML;
+    res->charset = CHARSET;
+    res->expires = EXPIRESNEVER;
+    res->content = "<html>                                                              \
                         <body>                                                          \
                             <p style=\"font-weight: bold; font-size: 14px; text-align: center;\">           \
-                            Hello wurld!                                                \
+                            404 File Not Found                                          \
                             </p>                                                        \
                         </body>                                                         \
                     </html>%s";
-
-    md_res_write(conn, res);
 
     return CLOSE;
 }
