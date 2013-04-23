@@ -38,12 +38,12 @@ All rights reserved
 
 /* CONSTANT DEFINITIONS */
 #define DEBUG
-#define N_THREADS 4
+#define N_THREADS 1
 
 #define RESSIZE			8 * 1024
 #define REQSIZE			8 * 1024
+#define READBUFF		16 * 1024
 #define LISTENQ			1024
-#define DOCROOT			"site"
 #define MAXQUEUESIZE	N_THREADS * 2
 #define TIMEFMT			"%H:%M:%S %m.%d.%y"
 
@@ -174,11 +174,9 @@ struct {
 	conn_state_cb cleanup;
 } state_actions;
 
-struct {
-	sem_t* sem_q_empty;
-	sem_t* sem_q_full;
-	pthread_mutex_t* mtx_conn_queue;
-} queue_info;
+sem_t* sem_q_empty;
+sem_t* sem_q_full;
+pthread_mutex_t mtx_conn_queue;
 
 struct {
 	int log_level;
@@ -218,7 +216,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 				strftime(log_info.timestamp, sizeof(log_info.timestamp), TIMEFMT, log_info.current_time);	\
 				pthread_mutex_lock(&log_info.mtx_term);	\
 				fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
-				fprintf(LOG_FD, "%u:\t", (unsigned int) pthread_self());	\
+				fprintf(LOG_FD, "%x:\t", (unsigned int) pthread_self());	\
 				fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 				fprintf(LOG_FD, "\n");	\
 				pthread_mutex_unlock(&log_info.mtx_term);	\
@@ -246,7 +244,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 				strftime(log_info.timestamp, sizeof(log_info.timestamp), TIMEFMT, log_info.current_time);	\
 		        pthread_mutex_lock(&log_info.mtx_term);	\
 		        fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
-		        fprintf(LOG_FD, "%u:\t", (unsigned int) pthread_self());	\
+		        fprintf(LOG_FD, "%x> %s:%d:%s:", (unsigned int) pthread_self(), __FILE__, __LINE__, __FUNCTION__);	\
 		        fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 		        fprintf(LOG_FD, "\n");	\
 		        pthread_mutex_unlock(&log_info.mtx_term);	\
@@ -298,7 +296,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 		do {	\
 			if ( ((r)->buffer_index = read((c)->open_sd,	\
 			(r)->buffer, REQSIZE)) < 0) {	\
-				md_fatal("failed to read request from %s", inet_ntoa((c)->conn_info.sin_addr));	\
+				md_fatal("read request fail from %s, sd: %d", inet_ntoa((c)->conn_info.sin_addr), (c)->open_sd);	\
             }	\
             (r)->buffer[(r)->buffer_index] = '\0';	\
 		} while(0)

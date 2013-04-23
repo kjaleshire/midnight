@@ -25,8 +25,6 @@ int main(int argc, char *argv[]){
 	ev_io* watcher_accept = malloc(sizeof(ev_io));
 	ev_signal* watcher_sigint = malloc(sizeof(ev_signal));
 
-	queue_info.mtx_conn_queue = malloc(sizeof(pthread_mutex_t));
-
 	log_info.log_level = LOGDEBUG;
 
 	md_log_init();
@@ -47,7 +45,7 @@ int main(int argc, char *argv[]){
 		bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
 		listen(listen_sd, LISTENQ) < 0
 	) {
-		md_fatal("error creating & binding socket to %s",
+		md_fatal("socket create & bind fail on %s",
 			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : ADDRESS);
 	} else {
 		#ifdef DEBUG
@@ -56,11 +54,10 @@ int main(int argc, char *argv[]){
 		#endif
 	}
 
-	if( ( (queue_info.sem_q_empty = sem_open("conn_empty", O_CREAT, 0644, MAXQUEUESIZE)) == SEM_FAILED) ||
-		( (queue_info.sem_q_full = sem_open("conn_full", O_CREAT, 0644, 0))
-		 == SEM_FAILED) ||
-		(pthread_mutex_init(queue_info.mtx_conn_queue, NULL) != 0 ) ) {
-			md_fatal("error creating conn_data queue locking mechanisms");
+	if( ( (sem_q_empty = sem_open("q_empty", O_CREAT, 0644, MAXQUEUESIZE)) == SEM_FAILED) ||
+		( (sem_q_full = sem_open("q_full", O_CREAT, 0644, 0)) == SEM_FAILED) ||
+		(pthread_mutex_init(&mtx_conn_queue, NULL) != 0 ) ) {
+			md_fatal("queue sem/mutex create fail");
 	}
 
 	for(v = 0; v < N_THREADS; v++) {
@@ -68,7 +65,7 @@ int main(int argc, char *argv[]){
 		snprintf(c, sizeof(c), "tID %d", v);
 		if( (threads[v].quit = sem_open(c, O_CREAT, 0644, 0)) == SEM_FAILED ||
 			pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) md_worker, &threads[v]) < 0) {
-			md_fatal("thread pool spawn failure");
+			md_fatal("thread pool spawn fail");
 		}
 	}
 
@@ -93,23 +90,24 @@ int main(int argc, char *argv[]){
 
 void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 	socklen_t sock_size = sizeof(struct sockaddr_in);
-	conn_data *new_conn = malloc(sizeof(conn_data));
+	conn_data *conn = malloc(sizeof(conn_data));
 
-	if( (new_conn->open_sd = accept(listen_sd, (struct sockaddr *) &(new_conn->conn_info), &sock_size)) < 0) {
-		md_fatal("connection accept failure from client %s", inet_ntoa(new_conn->conn_info.sin_addr));
+	if( (conn->open_sd = accept(listen_sd, (struct sockaddr *) &(conn->conn_info), &sock_size)) < 0) {
+		md_fatal("accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));
 	} else {
 		#ifdef DEBUG
-		md_log(LOGDEBUG, "accepted connection from client %s", inet_ntoa(new_conn->conn_info.sin_addr));
+		md_log(LOGDEBUG, "accepted from client %s, descriptor %d", inet_ntoa(conn->conn_info.sin_addr), conn->open_sd);
 		#endif
 	}
 
-	sem_wait(queue_info.sem_q_empty);
-	pthread_mutex_lock(queue_info.mtx_conn_queue);
-	STAILQ_INSERT_TAIL(&conn_q_head, new_conn, conn_q_next);
-	pthread_mutex_unlock(queue_info.mtx_conn_queue);
-	sem_post(queue_info.sem_q_full);
+	sem_wait(sem_q_empty);
+	pthread_mutex_lock(&mtx_conn_queue);
+	STAILQ_INSERT_TAIL(&conn_q_head, conn, conn_q_next);
+	pthread_mutex_unlock(&mtx_conn_queue);
+	sem_post(sem_q_full);
+
 	#ifdef DEBUG
-	md_log(LOGDEBUG, "queued new conn_data");
+	md_log(LOGDEBUG, "enqueued new connection to client %s, descriptor %d", inet_ntoa(conn->conn_info.sin_addr), conn->open_sd);
 	#endif
 }
 

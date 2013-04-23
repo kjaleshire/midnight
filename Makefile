@@ -2,24 +2,25 @@ CC=clang
 CFLAGS=-lev -O4
 ANALYZEFLAGS=--analyze -Wall -lev
 DEBUGFLAGS=-O0 -g -lev
-SOURCE=$(wildcard src/*.c)
-RAGELSOURCE=src/http_parser.c src/worker.c
+SOURCE=$(wildcard src/*.c) $(RAGELTARGET)
+RAGELTARGET=src/http_parser.c src/worker.c
+RAGELSOURCE=$(RAGELTARGET:.c=.rl)
 APPNAME=midnight
 
 all: debug
 
-$(APPNAME): $(RAGELSOURCE)
+$(APPNAME): $(RAGELTARGET)
 	$(CC) $(CFLAGS) $(SOURCE) -o $(APPNAME)
 
-analyze: $(RAGELSOURCE)
+analyze: $(RAGELTARGET)
 	$(CC) $(ANALYZEFLAGS) $(SOURCE)
 
-debug: $(RAGELSOURCE)
+debug: $(RAGELTARGET)
 	$(CC) $(DEBUGFLAGS) $(SOURCE) -o $(APPNAME)
 
-$(RAGELSOURCE):
+$(RAGELTARGET): $(RAGELSOURCE)
 	ragel -G2 src/http_parser.rl
 	ragel -G2 src/worker.rl
 
 clean:
-	rm -rf $(APPNAME) $(APPNAME).dSYM a.out a.out.dSYM $(SOURCEFILES:.c=.plist) $(RAGELSOURCE:.c=.plist) $(RAGELSOURCE) *.o
+	rm -rf $(APPNAME) $(APPNAME).dSYM a.out a.out.dSYM $(patsubst src%, .%, $(SOURCE:.c=.plist)) $(RAGELTARGET:.c=.plist) $(RAGELTARGET) *.o
