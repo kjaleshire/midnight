@@ -222,6 +222,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 				pthread_mutex_unlock(&log_info.mtx_term);	\
 			}	\
 		} while(0)
+#define TRACE()  md_log(LOGDEBUG, "> %s:%d:%s", __FILE__, __LINE__, __FUNCTION__)
 #else
 #define LOG_FD stdout
 #define md_log(e, m, ...)	\
@@ -233,6 +234,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 				pthread_mutex_unlock(&log_info.mtx_term);	\
 			}	\
 		} while(0)
+#define TRACE()
 #endif
 
 /* spoilers: everyone dies */
@@ -267,7 +269,6 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 		do {	\
 			(r)->buffer_index += snprintf(&((r)->buffer[(r)->buffer_index]), \
 			RESSIZE - (r)->buffer_index, (m), ##__VA_ARGS__);	\
-			assert((r)->buffer_index <= RESSIZE);	\
 		} while(0)
 
 #define md_res_write(c, r)	\
@@ -295,10 +296,11 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 #define md_req_read(r, c)	\
 		do {	\
 			if ( ((r)->buffer_index = read((c)->open_sd,	\
-			(r)->buffer, REQSIZE)) < 0) {	\
+			(r)->buffer, REQSIZE - 1)) < 0) {	\
 				md_fatal("read request fail from %s, sd: %d", inet_ntoa((c)->conn_info.sin_addr), (c)->open_sd);	\
             }	\
             (r)->buffer[(r)->buffer_index] = '\0';	\
+            assert((r)->buffer_index < REQSIZE);	\
 		} while(0)
 
 #define md_res_init(r)	\

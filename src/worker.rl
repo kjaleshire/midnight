@@ -37,13 +37,12 @@ All rights reserved
 
 %% write data;
 
-conn_data* conn;
-request* req;
-response* res;
-http_parser* parser;
-struct ev_loop *loop;               // local thread loop (for timeouts and such)
-
 void md_worker(thread_info *opts) {
+    conn_data* conn;
+    request* req;
+    response* res;
+    http_parser* parser;
+
     req = malloc(sizeof(request));
 
     res = malloc(sizeof(response));
@@ -52,22 +51,23 @@ void md_worker(thread_info *opts) {
     http_parser_init(parser);
     parser->data = (void *) req;
 
-    loop = ev_loop_new(EVFLAG_AUTO);
-
     for(;;) {
-        int v;
         #ifdef DEBUG
         md_log(LOGDEBUG, "awaiting new connection");
         #endif
 
+        TRACE();
         /*  wait for the sem_q_full semaphore; posting means a conn_data has been queued
             proceed to lock queue, pull conn_data off, unlock, and post to sem_q_empty */
-        if( sem_wait(sem_q_full) < 0 && errno == EDEADLK ) md_fatal("sem_wait(sem_q_full) deadlocked");
+        assert(sem_wait(sem_q_full) == 0);
         pthread_mutex_lock(&mtx_conn_queue);
-        conn = STAILQ_FIRST(&conn_q_head);
-        STAILQ_REMOVE_HEAD(&conn_q_head, conn_q_next);
+        assert(STAILQ_FIRST(&conn_q_head) != NULL);
+        if(STAILQ_FIRST(&conn_q_head) != NULL) {
+            conn = STAILQ_FIRST(&conn_q_head);
+            STAILQ_REMOVE_HEAD(&conn_q_head, conn_q_next);
+        }
         pthread_mutex_unlock(&mtx_conn_queue);
-        sem_post(sem_q_empty);
+        assert(sem_post(sem_q_empty) == 0);
 
         #ifdef DEBUG
         md_log(LOGDEBUG, "dequeued client %s, descriptor %d", inet_ntoa(conn->conn_info.sin_addr), conn->open_sd);
@@ -98,6 +98,7 @@ void md_worker(thread_info *opts) {
 }
 
 int md_state_change(conn_data *conn, request *req, response *res, http_parser *parser, int event) {
+    TRACE();
     assert(event >= 10 && event <= 20 && "event out of range");
 
     int event_queue[2] = {0};
@@ -114,6 +115,7 @@ int md_state_change(conn_data *conn, request *req, response *res, http_parser *p
 }
 
 int md_state_init(conn_data *conn, request *req, response *res, http_parser *parser) {
+    TRACE();
 
     %% write init;
 
@@ -121,6 +123,7 @@ int md_state_init(conn_data *conn, request *req, response *res, http_parser *par
 }
 
 int md_parse_init(conn_data *conn, request *req, response *res, http_parser *parser) {
+    TRACE();
     md_res_init(res);
     md_req_init(req);
     http_parser_reset(parser);
@@ -129,6 +132,7 @@ int md_parse_init(conn_data *conn, request *req, response *res, http_parser *par
 }
 
 int md_parse_exec(conn_data *conn, request *req, response *res, http_parser *parser) {
+    TRACE();
     md_req_read(req, conn);
     md_log(LOGDEBUG, "%s", req->buffer);
     if(req->buffer_index == 0) {
@@ -138,7 +142,7 @@ int md_parse_exec(conn_data *conn, request *req, response *res, http_parser *par
     /* TODO replace assert here with handler in case request is larger than REQSIZE */
     assert(req->buffer_index < REQSIZE && "request size too large. refactor into HTTP Error 413");
     http_parser_execute(parser, req->buffer, req->buffer_index, 0);
-
+    TRACE();
     if(http_parser_has_error(parser)) {
         return PARSE_ERROR;
     } else if(http_parser_is_finished(parser)) {
@@ -149,6 +153,8 @@ int md_parse_exec(conn_data *conn, request *req, response *res, http_parser *par
 }
 
 int md_read_request_method(conn_data *conn, request *req, response *res, http_parser *parser) {
+    TRACE();
+    /*
     #ifdef DEBUG
     md_log(LOGDEBUG, "Request method: %s", req->request_method);
     md_log(LOGDEBUG, "Request URI: %s", req->request_uri);
@@ -161,6 +167,7 @@ int md_read_request_method(conn_data *conn, request *req, response *res, http_pa
         md_log(LOGDEBUG, "%s: %s", s->key, s->value);
     }
     #endif
+    */
 
     time_t ticks = time(NULL);
 
@@ -168,7 +175,7 @@ int md_read_request_method(conn_data *conn, request *req, response *res, http_pa
     res->current_time = ctime(&ticks);
     res->servername = SERVERNAME;
     res->connection = CONN_CLOSE;
-
+    TRACE();
     if(strcmp(req->request_method, GET) == 0) {
         return GET_REQUEST;
     } else {
@@ -177,6 +184,7 @@ int md_read_request_method(conn_data *conn, request *req, response *res, http_pa
 }
 
 int md_send_request_invalid(conn_data *conn, request *req, response *res, http_parser *parser) {
+    TRACE();
     md_log(LOGDEBUG, "500 Internal Server Error");
 
     res->status = SRVERR_S;
@@ -196,6 +204,7 @@ int md_send_request_invalid(conn_data *conn, request *req, response *res, http_p
 }
 
 int md_validate_get(conn_data *conn, request *req, response *res, http_parser *parser) {
+    TRACE();
     if(req->request_path[strlen(req->request_path) - 1] == '/') {
         char *s = malloc(sizeof(char) * (strlen(req->request_path) + strlen(DEFAULT_FILE)));
         s[0] = '\0';
@@ -215,6 +224,7 @@ int md_validate_get(conn_data *conn, request *req, response *res, http_parser *p
 }
 
 int md_send_get_response(conn_data *conn, request *req, response *res, http_parser *parser) {
+    TRACE();
     #ifdef DEBUG
     md_log(LOGDEBUG, "200 OK");
     #endif
@@ -248,13 +258,14 @@ int md_send_get_response(conn_data *conn, request *req, response *res, http_pars
     } if( (v = write(conn->open_sd, buffer, index)) < 0 ) {
         md_fatal("connection write failure, client %s", inet_ntoa(conn->conn_info.sin_addr));
     }
-
+    TRACE();
     close(file_fd);
 
     return CLOSE;
 }
 
 int md_send_404_response(conn_data *conn, request *req, response *res, http_parser *parser) {
+    TRACE();
     md_log(LOGDEBUG, "404 Not Found");
 
     res->status = NF_S;
@@ -269,11 +280,14 @@ int md_send_404_response(conn_data *conn, request *req, response *res, http_pars
                         </body>                                                         \
                     </html>%s";
 
+    md_res_write(conn, res);
+
     return CLOSE;
 }
 
 int md_cleanup(conn_data *conn, request *req, response *res, http_parser *parser) {
     close(conn->open_sd);
+    TRACE();
     free(conn);
 
     md_req_destroy(req);

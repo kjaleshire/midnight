@@ -130,6 +130,7 @@ size_t http_parser_execute(http_parser *parser, const char *buffer, size_t len, 
 
 	assert(*pe == '\0' && "pointer does not end on NUL");
 	assert(pe - p == len - off && "pointers aren't same distance");
+	TRACE();
 
 	%% write exec;
 
@@ -255,7 +256,5 @@ void md_http_version(void *data, const char *at, size_t length) {
 }
 
 void md_header_done(void *data, const char *at, size_t length) {
-	#ifdef DEBUG
-	md_log(LOGDEBUG, "done parsing!");
-	#endif
+	TRACE();
 }
