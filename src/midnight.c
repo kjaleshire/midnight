@@ -38,11 +38,9 @@ int main(int argc, char *argv[]){
 	servaddr.sin_port = htons(PORT);
 
 	if( (listen_sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 ||
-	/*
 	#ifdef DEBUG
-		setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(v)) < 0 ||
+		setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(v)) < 0 ||	// so we can quickly reuse port
 	#endif
-	*/
 		bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
 		listen(listen_sd, LISTENQ) < 0
 	) {
@@ -90,7 +88,6 @@ int main(int argc, char *argv[]){
 void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 	socklen_t sock_size = sizeof(struct sockaddr_in);
 	conn_data *conn = malloc(sizeof(conn_data));
-	int v;
 
 	if( (conn->open_sd = accept(listen_sd, (struct sockaddr *) &(conn->conn_info), &sock_size)) < 0) {
 		md_fatal("accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));

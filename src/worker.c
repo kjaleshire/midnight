@@ -1,3 +1,5 @@
+
+#line 1 "src/worker.rl"
 /*
 
 Midnight worker thread logic
@@ -16,26 +18,20 @@ All rights reserved
 #define CALL(A) next = state_actions.A(conn, req, res, parser)
 #endif
 
-%%{
-    machine StateActions;
 
-    alphtype int;
+#line 36 "src/worker.rl"
 
-    access conn->;
 
-    action parse_init { CALL(parse_init); }
-    action parse_exec { CALL(parse_exec); }
-    action read_request_method { CALL(read_request_method); }
-    action validate_get { CALL(validate_get); }
-    action send_get_response { CALL(send_get_response); }
-    action send_request_invalid { CALL(send_request_invalid); }
-    action send_404_response { CALL(send_404_response); }
-    action cleanup { CALL(cleanup); }
 
-    include ConnectionState "connection_state.rl";
-}%%
+#line 27 "src/worker.c"
+static const int StateActions_start = 5;
+static const int StateActions_first_final = 5;
+static const int StateActions_error = 0;
 
-%% write data;
+static const int StateActions_en_main = 5;
+
+
+#line 39 "src/worker.rl"
 
 void md_worker(thread_info *opts) {
     int next;
@@ -106,7 +102,109 @@ int md_state_change(conn_data *conn, request *req, response *res, http_parser *p
     const int *p = event_queue;
     const int *pe = p+1;
 
-    %% write exec;
+    
+#line 107 "src/worker.c"
+	{
+	if ( p == pe )
+		goto _test_eof;
+	switch (  conn->cs )
+	{
+tr4:
+#line 33 "src/worker.rl"
+	{ CALL(cleanup); }
+	goto st5;
+st5:
+	if ( ++p == pe )
+		goto _test_eof5;
+case 5:
+#line 121 "src/worker.c"
+	if ( (*p) == 10 )
+		goto tr8;
+	goto st0;
+st0:
+ conn->cs = 0;
+	goto _out;
+tr0:
+#line 27 "src/worker.rl"
+	{ CALL(parse_exec); }
+	goto st1;
+tr8:
+#line 26 "src/worker.rl"
+	{ CALL(parse_init); }
+	goto st1;
+st1:
+	if ( ++p == pe )
+		goto _test_eof1;
+case 1:
+#line 140 "src/worker.c"
+	switch( (*p) ) {
+		case 11: goto tr0;
+		case 12: goto tr2;
+		case 13: goto tr3;
+		case 19: goto tr4;
+	}
+	goto st0;
+tr2:
+#line 28 "src/worker.rl"
+	{ CALL(read_request_method); }
+	goto st2;
+st2:
+	if ( ++p == pe )
+		goto _test_eof2;
+case 2:
+#line 156 "src/worker.c"
+	switch( (*p) ) {
+		case 14: goto tr5;
+		case 15: goto tr3;
+	}
+	goto st0;
+tr5:
+#line 29 "src/worker.rl"
+	{ CALL(validate_get); }
+	goto st3;
+st3:
+	if ( ++p == pe )
+		goto _test_eof3;
+case 3:
+#line 170 "src/worker.c"
+	switch( (*p) ) {
+		case 16: goto tr6;
+		case 17: goto tr3;
+		case 18: goto tr7;
+	}
+	goto st0;
+tr3:
+#line 31 "src/worker.rl"
+	{ CALL(send_request_invalid); }
+	goto st4;
+tr6:
+#line 30 "src/worker.rl"
+	{ CALL(send_get_response); }
+	goto st4;
+tr7:
+#line 32 "src/worker.rl"
+	{ CALL(send_404_response); }
+	goto st4;
+st4:
+	if ( ++p == pe )
+		goto _test_eof4;
+case 4:
+#line 193 "src/worker.c"
+	if ( (*p) == 19 )
+		goto tr4;
+	goto st0;
+	}
+	_test_eof5:  conn->cs = 5; goto _test_eof; 
+	_test_eof1:  conn->cs = 1; goto _test_eof; 
+	_test_eof2:  conn->cs = 2; goto _test_eof; 
+	_test_eof3:  conn->cs = 3; goto _test_eof; 
+	_test_eof4:  conn->cs = 4; goto _test_eof; 
+
+	_test_eof: {}
+	_out: {}
+	}
+
+#line 110 "src/worker.rl"
 
     return next;
 }
@@ -114,7 +212,13 @@ int md_state_change(conn_data *conn, request *req, response *res, http_parser *p
 int md_state_init(conn_data *conn, request *req, response *res, http_parser *parser) {
     TRACE();
 
-    %% write init;
+    
+#line 217 "src/worker.c"
+	{
+	 conn->cs = StateActions_start;
+	}
+
+#line 118 "src/worker.rl"
 
     return 1;
 }

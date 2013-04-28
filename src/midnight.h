@@ -67,12 +67,11 @@ enum {
 #define HEAD			"HEAD"
 #define PUT				"PUT"
 
-/* response types */
+/* response status types */
 #define HTTP11			"HTTP/1.1"
 #define OK_S			"200 OK"
 #define NF_S			"404 Not Found"
 #define SRVERR_S		"500 Internal Server Error"
-#define NF_HTML	"<html><body><p>404	file not found.</p></body></html>"
 
 /* default filename */
 #define DEFAULT_FILE	"index.html"
@@ -87,9 +86,9 @@ enum {
 
 /* header stock values	*/
 #define CONN_CLOSE		"close"
-#define CONN_KA			"keep-alive"
-#define SERVERNAME		"midnight"
-#define EXPIRESNEVER	"-1"
+#define CONN_KEEPALIVE	"keep-alive"
+#define SERVER_NAME		"midnight"
+#define EXPIRES_NEVER	"-1"
 
 /* MIME types... */
 #define MIME_HTML		"text/html;"
