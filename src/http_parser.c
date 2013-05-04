@@ -1308,69 +1308,52 @@ void md_http_field(void *data, const char *field, size_t flen, const char *value
 }
 
 void md_request_method(void *data, const char *at, size_t length) {
-	request *r = (request *) data;
-
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
 	v[length] = '\0';
 
-	r->request_method = v;
+	((request *) data)->request_method = v;
 }
 
 void md_request_uri(void *data, const char *at, size_t length) {
-	request *r = (request *) data;
 
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
 	v[length] = '\0';
 
-	r->request_uri = v;
+	((request *) data)->request_uri = v;
 }
 
 void md_fragment(void *data, const char *at, size_t length) {
-	request *r = (request *) data;
-
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
 	v[length] = '\0';
 
-	r->fragment = v;
+	((request *) data)->fragment = v;
 }
 
 void md_request_path(void *data, const char *at, size_t length) {
-	request *r = (request *) data;
-/*
-	// allocate enough space to quickly prepend a '.' and append the NULL terminator and default filename if necessary
-	char *v = calloc(length + 2 + strlen(DEFAULT_FILE), sizeof(char));
-	strncpy(&(v[1]), at, length);  // offset by one so we can quickly prepend '.'
-	v[length + 1] = '\0';
-	v[0] = '.';
-*/
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
 	v[length] = '\0';
 
-	r->request_path = v;
+	((request *) data)->request_path = v;
 }
 
 void md_query_string(void *data, const char *at, size_t length) {
-	request *r = (request *) data;
-
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
 	v[length] = '\0';
 
-	r->query_string = v;
+	((request *) data)->query_string = v;
 }
 
 void md_http_version(void *data, const char *at, size_t length) {
-	request *r = (request *) data;
-
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
 	v[length] = '\0';
 
-	r->http_version = v;
+	((request *) data)->http_version = v;
 }
 
 void md_header_done(void *data, const char *at, size_t length) {

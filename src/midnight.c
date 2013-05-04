@@ -14,7 +14,6 @@ All rights reserved
 
 int listen_sd;
 thread_info threads[N_THREADS];
-struct conn_q_head_struct conn_q_head = STAILQ_HEAD_INITIALIZER(conn_q_head);
 
 int main(int argc, char *argv[]){
 	int v;
@@ -37,6 +36,7 @@ int main(int argc, char *argv[]){
 	servaddr.sin_addr.s_addr = htonl(listen_address);
 	servaddr.sin_port = htons(PORT);
 
+	v = 1;
 	if( (listen_sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 ||
 	#ifdef DEBUG
 		setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(v)) < 0 ||	// so we can quickly reuse port
@@ -55,13 +55,13 @@ int main(int argc, char *argv[]){
 	// see sem
 	if( (sem_unlink("sem_q_empty") != 0 && errno != ENOENT) ||
 		(sem_unlink("sem_q_full") != 0 && errno != ENOENT) ||
-		(sem_q_empty = sem_open("sem_q_empty", O_CREAT, 0600, MAXQUEUESIZE)) == SEM_FAILED ||
-		(sem_q_full = sem_open("sem_q_full", O_CREAT, 0600, 0)) == SEM_FAILED ||
-		pthread_mutex_init(&mtx_conn_queue, NULL) != 0 ) {
+		(queue_info.sem_q_empty = sem_open("sem_q_empty", O_CREAT, 0600, MAXQUEUESIZE)) == SEM_FAILED ||
+		(queue_info.sem_q_full = sem_open("sem_q_full", O_CREAT, 0600, 0)) == SEM_FAILED ||
+		pthread_mutex_init(&(queue_info.mtx_conn_queue), NULL) != 0 ) {
 			md_fatal("queue sem/mutex create fail");
 	}
 
-	STAILQ_INIT(&conn_q_head);
+	STAILQ_INIT(&(queue_info.conn_queue));
 
 	for(v = 0; v < N_THREADS; v++) {
 		char c[8];
@@ -86,23 +86,23 @@ int main(int argc, char *argv[]){
 }
 
 void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
+	TRACE();
 	socklen_t sock_size = sizeof(struct sockaddr_in);
 	conn_data *conn = malloc(sizeof(conn_data));
 
 	if( (conn->open_sd = accept(listen_sd, (struct sockaddr *) &(conn->conn_info), &sock_size)) < 0) {
 		md_fatal("accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));
 	} else {
-		TRACE();
 		#ifdef DEBUG
 		md_log(LOGDEBUG, "accepted client %s, descriptor %d", inet_ntoa(conn->conn_info.sin_addr), conn->open_sd);
 		#endif
 	}
 
-	assert(sem_wait(sem_q_empty) == 0);
-	pthread_mutex_lock(&mtx_conn_queue);
-	STAILQ_INSERT_TAIL(&conn_q_head, conn, conn_q_next);
-	pthread_mutex_unlock(&mtx_conn_queue);
-	assert(sem_post(sem_q_full) == 0);
+	assert(sem_wait(queue_info.sem_q_empty) == 0);
+	pthread_mutex_lock(&(queue_info.mtx_conn_queue));
+	STAILQ_INSERT_TAIL(&(queue_info.conn_queue), conn, q_next);
+	pthread_mutex_unlock(&(queue_info.mtx_conn_queue));
+	assert(sem_post(queue_info.sem_q_full) == 0);
 
 	TRACE();
 	#ifdef DEBUG

@@ -3,7 +3,7 @@ CFLAGS=-lev -O4
 ANALYZEFLAGS=--analyze -Wall -lev
 DEBUGFLAGS=-O0 -g -lev
 SOURCE=src/midnight.c $(RAGELTARGET)
-RAGELTARGET=src/http_parser.c src/worker.c
+RAGELTARGET=src/http11_parser.c src/worker.c
 RAGELSOURCE=$(RAGELTARGET:.c=.rl)
 APPNAME=midnight
 
@@ -19,7 +19,7 @@ debug: $(RAGELTARGET) $(SOURCE)
 	$(CC) $(DEBUGFLAGS) $(SOURCE) -o $(APPNAME)
 
 $(RAGELTARGET): $(RAGELSOURCE)
-	ragel -G2 src/http_parser.rl
+	ragel -G2 src/http11_parser.rl
 	ragel -G2 src/worker.rl
 
 clean:

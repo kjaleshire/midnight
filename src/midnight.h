@@ -33,11 +33,11 @@ All rights reserved
 #include <copyfile.h>
 #include <ev.h>					// libev event handler
 #include <sys/queue.h>			// queue macros
-#include "http_parser.h"		// parser header
+#include "http11_parser.h"		// parser header
 #include "uthash.h"				// hash table macros
 
 /* CONSTANT DEFINITIONS */
-#define DEBUG
+#define DEBUG	1
 #define N_THREADS 1
 
 #define RESSIZE			8 * 1024
@@ -46,6 +46,7 @@ All rights reserved
 #define LISTENQ			1024
 #define MAXQUEUESIZE	N_THREADS * 2
 #define TIMEFMT			"%H:%M:%S %m.%d.%y"
+#define TIMESTAMP_SIZE	32
 
 /* error types */
 #define ERRPROG			-1
@@ -114,7 +115,7 @@ typedef struct conn_data {
     int open_sd;
     int cs;
     struct sockaddr_in conn_info;
-    STAILQ_ENTRY(conn_data) conn_q_next;
+    STAILQ_ENTRY(conn_data) q_next;
 } conn_data;
 
 typedef struct http_header {
@@ -173,19 +174,20 @@ struct {
 	conn_state_cb cleanup;
 } state_actions;
 
-sem_t* sem_q_empty;
-sem_t* sem_q_full;
-pthread_mutex_t mtx_conn_queue;
+struct {
+	sem_t* sem_q_empty;
+	sem_t* sem_q_full;
+	pthread_mutex_t mtx_conn_queue;
+	STAILQ_HEAD(queue_struct, conn_data) conn_queue;
+} queue_info;
 
 struct {
 	int log_level;
-	char timestamp[32];
+	char timestamp[TIMESTAMP_SIZE];
 	time_t ticks;
 	struct tm* current_time;
 	pthread_mutex_t mtx_term;
 } log_info;
-
-extern STAILQ_HEAD(conn_q_head_struct, conn_data) conn_q_head;
 
 void md_worker(thread_info* opts);
 
@@ -212,7 +214,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 			if((e) <= log_info.log_level) {	\
 				log_info.ticks = time(NULL);	\
 				log_info.current_time = localtime(&log_info.ticks);	\
-				strftime(log_info.timestamp, sizeof(log_info.timestamp), TIMEFMT, log_info.current_time);	\
+				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMEFMT, log_info.current_time);	\
 				pthread_mutex_lock(&log_info.mtx_term);	\
 				fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
 				fprintf(LOG_FD, "%x:\t", (unsigned int) pthread_self());	\
@@ -223,7 +225,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 		} while(0)
 #define TRACE()  md_log(LOGDEBUG, "> %s:%d:%s", __FILE__, __LINE__, __FUNCTION__)
 #else
-#define LOG_FD stdout
+#define LOG_FD stderr
 #define md_log(e, m, ...)	\
 		do {	\
 			if((e) <= log_info.log_level) {	\
@@ -242,7 +244,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 		    if(LOGPANIC <= log_info.log_level) {	\
 		    	log_info.ticks = time(NULL);	\
 				log_info.current_time = localtime(&log_info.ticks);	\
-				strftime(log_info.timestamp, sizeof(log_info.timestamp), TIMEFMT, log_info.current_time);	\
+				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMEFMT, log_info.current_time);	\
 		        pthread_mutex_lock(&log_info.mtx_term);	\
 		        fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
 		        fprintf(LOG_FD, "%x> %s:%d:%s:", (unsigned int) pthread_self(), __FILE__, __LINE__, __FUNCTION__);	\
@@ -268,6 +270,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 		do {	\
 			(r)->buffer_index += snprintf(&((r)->buffer[(r)->buffer_index]), \
 			RESSIZE - (r)->buffer_index, (m), ##__VA_ARGS__);	\
+			assert((r)->buffer_index < RESSIZE);	\
 		} while(0)
 
 #define md_res_write(c, r)	\
@@ -298,8 +301,8 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 			(r)->buffer, REQSIZE - 1)) < 0) {	\
 				md_fatal("read request fail from %s, sd: %d", inet_ntoa((c)->conn_info.sin_addr), (c)->open_sd);	\
             }	\
-            (r)->buffer[(r)->buffer_index] = '\0';	\
             assert((r)->buffer_index < REQSIZE);	\
+            (r)->buffer[(r)->buffer_index] = '\0';	\
 		} while(0)
 
 #define md_res_init(r)	\
@@ -339,6 +342,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 				free(s->value);	\
 				free(s);	\
 			}	\
+			(r)->buffer[0] = '\0';	\
 			if((r)->request_method != NULL) free((r)->request_method);	\
 	        if((r)->request_uri != NULL) free((r)->request_uri);	\
 	        if((r)->fragment != NULL) free((r)->fragment);	\

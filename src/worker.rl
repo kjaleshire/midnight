@@ -60,13 +60,13 @@ void md_worker(thread_info *opts) {
         TRACE();
         /*  wait for the sem_q_full semaphore; posting means a conn_data has been queued
             proceed to lock queue, pull conn_data off, unlock, and post to sem_q_empty */
-        assert(sem_wait(sem_q_full) == 0);
-        pthread_mutex_lock(&mtx_conn_queue);
-        assert(STAILQ_FIRST(&conn_q_head) != NULL);
-        conn = STAILQ_FIRST(&conn_q_head);
-        STAILQ_REMOVE_HEAD(&conn_q_head, conn_q_next);
-        pthread_mutex_unlock(&mtx_conn_queue);
-        assert(sem_post(sem_q_empty) == 0);
+        assert(sem_wait(queue_info.sem_q_full) == 0);
+        pthread_mutex_lock(&(queue_info.mtx_conn_queue));
+        assert(STAILQ_FIRST(&(queue_info.conn_queue)) != NULL);
+        conn = STAILQ_FIRST(&(queue_info.conn_queue));
+        STAILQ_REMOVE_HEAD(&(queue_info.conn_queue), q_next);
+        pthread_mutex_unlock(&(queue_info.mtx_conn_queue));
+        assert(sem_post(queue_info.sem_q_empty) == 0);
 
         #ifdef DEBUG
         md_log(LOGDEBUG, "dequeued client %s, descriptor %d", inet_ntoa(conn->conn_info.sin_addr), conn->open_sd);
@@ -151,7 +151,7 @@ int md_parse_exec(conn_data *conn, request *req, response *res, http_parser *par
 
 int md_read_request_method(conn_data *conn, request *req, response *res, http_parser *parser) {
     TRACE();
-    /*
+
     #ifdef DEBUG
     md_log(LOGDEBUG, "Request method: %s", req->request_method);
     md_log(LOGDEBUG, "Request URI: %s", req->request_uri);
@@ -164,7 +164,7 @@ int md_read_request_method(conn_data *conn, request *req, response *res, http_pa
         md_log(LOGDEBUG, "%s: %s", s->key, s->value);
     }
     #endif
-    */
+
 
     time_t ticks = time(NULL);
 
@@ -202,30 +202,24 @@ int md_send_request_invalid(conn_data *conn, request *req, response *res, http_p
 
 int md_validate_get(conn_data *conn, request *req, response *res, http_parser *parser) {
     TRACE();
-    /*
-    if(req->request_path[strlen(req->request_path) - 1] == '/') {
-        char *s = calloc(strlen(req->request_path) + strlen(DEFAULT_FILE), sizeof(char));
-        s[0] = '\0';
-        strcpy(s, req->request_path);
-        strcpy(&s[strlen(s)], DEFAULT_FILE);
-        free(req->request_path);
-        req->request_path = s;
-    }
-*/
-    if(req->request_path[strlen(req->request_path) - 1] == '/') {
+
+    if(*(req->request_path + strlen(req->request_path) - 1) == '/') {
         int n = strlen(req->request_path) + strlen(DEFAULT_FILE);
         char *s = calloc(n + 1, sizeof(char));
         sprintf(s, "%s%s", req->request_path, DEFAULT_FILE);
+
+        assert(strlen(s) == strlen(req->request_path) + strlen(DEFAULT_FILE));
         md_log(LOGDEBUG, "new request_path: %s", s);
+
         free(req->request_path);
         req->request_path = s;
         md_log(LOGDEBUG, "requested file: %s", req->request_path);
     }
     if(req->request_path == NULL || req->request_uri == NULL) {
         return GET_NOT_VALID;
-    } else if (stat(&(req->request_path[1]), NULL) < 0 && errno == ENOENT) {
-        req->request_path[strlen(req->request_path) - 2] = '\0';
-        if (stat(&(req->request_path[1]), NULL) < 0 && errno == ENOENT) {
+    } else if (stat(req->request_path + 1, NULL) < 0 && errno == ENOENT) {
+        *(req->request_path + strlen(req->request_path) - 2) = '\0';
+        if (stat(req->request_path + 1, NULL) < 0 && errno == ENOENT) {
             return GET_NOT_FOUND;
         }
     }
@@ -251,11 +245,11 @@ int md_send_get_response(conn_data *conn, request *req, response *res, http_pars
 
     md_res_write(conn, res);
 
-    if( (file_fd = open(&(req->request_path[1]), O_RDONLY)) < 0 ) {
+    if( (file_fd = open(req->request_path + 1, O_RDONLY)) < 0 ) {
        md_fatal("error opening file: %s", req->request_path);
     }
 
-    while( (v = read(file_fd, &buffer[index], READBUFF - index)) != 0 ) {
+    while( (v = read(file_fd, buffer + index, READBUFF - index)) != 0 ) {
         if(v < 0) md_fatal("read file failure, descriptor: %d", file_fd);
         index += v;
         assert(index <= READBUFF && "index is bigger than buffer size");
@@ -302,6 +296,8 @@ int md_send_404_response(conn_data *conn, request *req, response *res, http_pars
 int md_cleanup(conn_data *conn, request *req, response *res, http_parser *parser) {
     close(conn->open_sd);
     TRACE();
+    md_log(LOGDEBUG, "conn address is %llx", (long long)conn);
+
     free(conn);
 
     md_req_destroy(req);

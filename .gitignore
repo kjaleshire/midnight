@@ -20,3 +20,6 @@
 scratch.*
 *.dSYM
 index.html
+midnight
+midnight.sublime-workspace
+midnight.sublime-project
