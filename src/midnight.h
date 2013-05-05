@@ -38,7 +38,7 @@ All rights reserved
 
 /* CONSTANT DEFINITIONS */
 #define DEBUG	1
-#define N_THREADS 1
+#define N_THREADS 2
 
 #define RESSIZE			8 * 1024
 #define REQSIZE			8 * 1024
@@ -113,7 +113,6 @@ enum {
 
 typedef struct conn_data {
     int open_sd;
-    int cs;
     struct sockaddr_in conn_info;
     STAILQ_ENTRY(conn_data) q_next;
 } conn_data;
@@ -156,12 +155,23 @@ typedef struct request {
 	char* http_version;
 } request;
 
+typedef struct conn_state {
+	response* res;
+
+	http_parser* parser;
+
+	conn_data* conn;
+	conn_data* old_conn;
+
+	int cs;
+} conn_state;
+
 typedef struct thread_info {
 	pthread_t thread_id;
 	sem_t* quit;
 } thread_info;
 
-typedef int (*conn_state_cb)(conn_data *conn, request *req, response *res, http_parser *parser);
+typedef int (*conn_state_cb)(conn_state* state);
 
 struct {
 	conn_state_cb parse_init;
@@ -191,17 +201,17 @@ struct {
 
 void md_worker(thread_info* opts);
 
-int md_state_init(conn_data *conn, request *req, response *res, http_parser *parser);
-int md_state_change(conn_data *conn, request *req, response *res, http_parser *parser, int event);
+int md_state_init(conn_state* state);
+int md_state_event(conn_state* state, int event);
 
-int md_parse_init(conn_data *conn, request *req, response *res, http_parser *parser);
-int md_parse_exec(conn_data *conn, request *req, response *res, http_parser *parser);
-int md_read_request_method(conn_data *conn, request *req, response *res, http_parser *parser);
-int md_validate_get(conn_data *conn, request *req, response *res, http_parser *parser);
-int md_send_get_response(conn_data *conn, request *req, response *res, http_parser *parser);
-int md_send_request_invalid(conn_data *conn, request *req, response *res, http_parser *parser);
-int md_send_404_response(conn_data *conn, request *req, response *res, http_parser *parser);
-int md_cleanup(conn_data *conn, request *req, response *res, http_parser *parser);
+int md_parse_init(conn_state* state);
+int md_parse_exec(conn_state* state);
+int md_read_request_method(conn_state* state);
+int md_validate_get(conn_state* state);
+int md_send_get_response(conn_state* state);
+int md_send_request_invalid(conn_state* state);
+int md_send_404_response(conn_state* state);
+int md_cleanup(conn_state* state);
 
 void md_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
 void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
@@ -247,9 +257,9 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMEFMT, log_info.current_time);	\
 		        pthread_mutex_lock(&log_info.mtx_term);	\
 		        fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
-		        fprintf(LOG_FD, "%x> %s:%d:%s:", (unsigned int) pthread_self(), __FILE__, __LINE__, __FUNCTION__);	\
+		        fprintf(LOG_FD, "%x:\t> %s:%d:%s:\tpanic: \"", (unsigned int) pthread_self(), __FILE__, __LINE__, __FUNCTION__);	\
 		        fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
-		        fprintf(LOG_FD, "\n");	\
+		        fprintf(LOG_FD, "\"\n");	\
 		        pthread_mutex_unlock(&log_info.mtx_term);	\
 		    }	\
 		    exit(ERRPROG);	\
@@ -291,7 +301,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
     		if((r)->content != NULL) {	\
     			md_res_buff((r), (r)->content, CRLF); }		\
 			if(write((c)->open_sd, (r)->buffer, (r)->buffer_index) < 0) {	\
-				md_fatal("socket write failed");	\
+				md_log(LOGINFO, "socket write failed");	\
 			}	\
 		} while(0)
 

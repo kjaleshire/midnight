@@ -221,6 +221,20 @@ main := (Request | SocketRequest) @done;
 %% write data;
 
 void http_parser_init(http_parser *parser)  {
+    int cs = 0;
+
+    %% write init;
+
+    parser->cs = cs;
+    parser->body_start = 0;
+    parser->content_len = 0;
+    parser->mark = 0;
+    parser->nread = 0;
+    parser->field_len = 0;
+    parser->field_start = 0;
+    parser->xml_sent = 0;
+    parser->json_sent = 0;
+
 	parser->http_field = md_http_field;
 	parser->request_method = md_request_method;
 	parser->request_uri = md_request_uri;
@@ -230,23 +244,6 @@ void http_parser_init(http_parser *parser)  {
 	parser->http_version = md_http_version;
 	parser->header_done = md_header_done;
 }
-
-void http_parser_reset(http_parser *parser) {
-	int cs = 0;
-
-	%% write init;
-
-  	parser->cs = cs;
-  	parser->body_start = 0;
-  	parser->content_len = 0;
-  	parser->mark = 0;
-  	parser->nread = 0;
-  	parser->field_len = 0;
-  	parser->field_start = 0;
-  	parser->xml_sent = 0;
-  	parser->json_sent = 0;
-}
-
 
 /** exec **/
 size_t http_parser_execute(http_parser *parser, const char *buffer, size_t len, size_t off)  {

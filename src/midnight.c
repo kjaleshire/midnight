@@ -66,7 +66,8 @@ int main(int argc, char *argv[]){
 	for(v = 0; v < N_THREADS; v++) {
 		char c[8];
 		snprintf(c, sizeof(c), "tID %d", v);
-		if( (threads[v].quit = sem_open(c, O_CREAT, 0644, 0)) == SEM_FAILED ||
+		if( (sem_unlink(c) != 0 && errno != ENOENT) ||
+			(threads[v].quit = sem_open(c, O_CREAT, 0644, 0)) == SEM_FAILED ||
 			pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) md_worker, &threads[v]) < 0) {
 			md_fatal("thread pool spawn fail");
 		}
@@ -98,11 +99,11 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 		#endif
 	}
 
-	assert(sem_wait(queue_info.sem_q_empty) == 0);
-	pthread_mutex_lock(&(queue_info.mtx_conn_queue));
-	STAILQ_INSERT_TAIL(&(queue_info.conn_queue), conn, q_next);
-	pthread_mutex_unlock(&(queue_info.mtx_conn_queue));
-	assert(sem_post(queue_info.sem_q_full) == 0);
+	sem_wait(queue_info.sem_q_empty);
+	pthread_mutex_lock(&queue_info.mtx_conn_queue);
+	STAILQ_INSERT_TAIL(&queue_info.conn_queue, conn, q_next);
+	pthread_mutex_unlock(&queue_info.mtx_conn_queue);
+	sem_post(queue_info.sem_q_full);
 
 	TRACE();
 	#ifdef DEBUG
@@ -113,14 +114,23 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
 	TRACE();
 	close(listen_sd);
-	#ifdef DEBUG
-	md_log(LOGDEBUG, "Shutdown");
-	#endif
-	/*for(i = 0; i < N_THREADS; i++) {
-		sem_post(threads[i].quit);
+	conn_data *conn;
+
+	for(int i = 0; i < N_THREADS; i++) {
+		sem_wait(queue_info.sem_q_empty);
+		pthread_mutex_lock(&queue_info.mtx_conn_queue);
+		conn = malloc(sizeof(conn_data));
+		conn->open_sd = 0;
+		STAILQ_INSERT_TAIL(&queue_info.conn_queue, conn, q_next);
+		pthread_mutex_unlock(&queue_info.mtx_conn_queue);
+		sem_post(queue_info.sem_q_full);
 	}
-	for(i = 0; i < N_THREADS; i++) {
+
+	for(int i = 0; i < N_THREADS; i++) {
 		pthread_join(threads[i].thread_id, NULL);
-	} */
+	}
+	#ifdef DEBUG
+	md_log(LOGDEBUG, "process quitting!");
+	#endif
 	exit(0);
 }

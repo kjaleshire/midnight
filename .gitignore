@@ -23,3 +23,5 @@ index.html
 midnight
 midnight.sublime-workspace
 midnight.sublime-project
+http11_parser.c
+worker.c

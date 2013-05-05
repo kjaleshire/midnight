@@ -21,7 +21,7 @@ typedef struct http_parser {
 	int xml_sent;
   	int json_sent;
 
-	void *data;
+  	void *data;
 
 	field_cb http_field;
 	element_cb request_method;
@@ -34,7 +34,6 @@ typedef struct http_parser {
 
 } http_parser;
 
-void http_parser_reset(http_parser *parser);
 void http_parser_init(http_parser *parser);
 size_t http_parser_execute(http_parser *parser, const char *data, size_t len, size_t off);
 
