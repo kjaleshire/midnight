@@ -76,6 +76,7 @@ enum {
 
 /* default filename */
 #define DEFAULT_FILE	"index.html"
+#define DOCROOT			"site"
 
 /* headers */
 #define DATE_H			"Date:"
@@ -164,6 +165,8 @@ typedef struct conn_state {
 	conn_data* old_conn;
 
 	int cs;
+
+	int nread;
 } conn_state;
 
 typedef struct thread_info {
@@ -305,13 +308,13 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 			}	\
 		} while(0)
 
-#define md_req_read(r, c)	\
+#define md_req_read(c, r)	\
 		do {	\
-			if ( ((r)->buffer_index = read((c)->open_sd,	\
-			(r)->buffer, REQSIZE - 1)) < 0) {	\
+			if ( ((r)->buffer_index += read((c)->open_sd,	\
+			(r)->buffer, REQSIZE - (r)->buffer_index) - 1) < 0) {	\
 				md_fatal("read request fail from %s, sd: %d", inet_ntoa((c)->conn_info.sin_addr), (c)->open_sd);	\
             }	\
-            assert((r)->buffer_index < REQSIZE);	\
+            assert((r)->buffer_index < REQSIZE - 1);	\
             (r)->buffer[(r)->buffer_index] = '\0';	\
 		} while(0)
 

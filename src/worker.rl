@@ -105,6 +105,8 @@ int md_state_init(conn_state* state) {
 
     %% write init;
 
+    state->nread = 0;
+
     return 1;
 }
 
@@ -124,7 +126,7 @@ int md_parse_exec(conn_state* state) {
     request* req = (request *) state->parser->data;
 
     TRACE();
-    md_req_read(req, state->conn);
+    md_req_read(state->conn, req);
     /*md_log(LOGDEBUG, "%s", req->buffer);*/
     if(req->buffer_index == 0) {
         return CLOSE;
@@ -132,7 +134,8 @@ int md_parse_exec(conn_state* state) {
 
     /* TODO replace assert here with handler in case request is larger than REQSIZE */
     assert(req->buffer_index < REQSIZE && "request size too large. refactor into HTTP Error 413");
-    http_parser_execute(state->parser, req->buffer, req->buffer_index, 0);
+    state->nread = http_parser_execute(state->parser, req->buffer, req->buffer_index, state->nread);
+    md_log(LOGDEBUG, "nread: %d", state->nread);
     TRACE();
     if(http_parser_has_error(state->parser)) {
         return PARSE_ERROR;
@@ -145,7 +148,21 @@ int md_parse_exec(conn_state* state) {
 
 int md_read_request_method(conn_state* state) {
     request* req = (request *) state->parser->data;
-    response* res = malloc(sizeof(response));
+    response* res;
+
+    if(state->res == NULL) {
+        state->res = malloc(sizeof(response));
+    }
+
+    res = state->res;
+
+    time_t ticks = time(NULL);
+
+    res->http_version = HTTP11;
+    res->current_time = ctime(&ticks);
+    res->servername = SERVER_NAME;
+    res->connection = CONN_CLOSE;
+
     md_res_init(res);
 
     TRACE();
@@ -163,13 +180,6 @@ int md_read_request_method(conn_state* state) {
     }
     #endif
 
-
-    time_t ticks = time(NULL);
-
-    res->http_version = HTTP11;
-    res->current_time = ctime(&ticks);
-    res->servername = SERVER_NAME;
-    res->connection = CONN_CLOSE;
     TRACE();
     state->res = res;
     if(strcmp(req->request_method, GET) == 0) {
@@ -180,7 +190,19 @@ int md_read_request_method(conn_state* state) {
 }
 
 int md_send_request_invalid(conn_state* state) {
-    response* res = state->res;
+    response* res;
+    time_t ticks;
+
+    if(state->res == NULL) {
+        state->res = malloc(sizeof(response));
+
+        state->res->http_version = HTTP11;
+        state->res->current_time = ctime(&ticks);
+        state->res->servername = SERVER_NAME;
+        state->res->connection = CONN_CLOSE;
+    }
+
+    res = state->res;
 
     TRACE();
     md_log(LOGDEBUG, "500 Internal Server Error");
@@ -188,9 +210,9 @@ int md_send_request_invalid(conn_state* state) {
     res->status = SRVERR_S;
     res->content_type = MIME_HTML;
     res->charset = CHARSET;
-    res->content =  "<html>                                                              \
+    res->content =  "<html>                                                             \
                         <body>                                                          \
-                            <p style=\"font-weight: bold; font-size: 14px; text-align: center;\">           \
+                            <p style=\"font-weight: bold; font-size: 14px; text-align: center;\">   \
                             500 Internal Server Error                                   \
                             </p>                                                        \
                         </body>                                                         \
@@ -203,25 +225,34 @@ int md_send_request_invalid(conn_state* state) {
 
 int md_validate_get(conn_state* state) {
     request* req = (request *) state->parser->data;
+    char *f;
     TRACE();
 
+    int n = strlen(req->request_path) + strlen(DOCROOT);
+
     if(*(req->request_path + strlen(req->request_path) - 1) == '/') {
-        int n = strlen(req->request_path) + strlen(DEFAULT_FILE);
-        char *s = calloc(n + 1, sizeof(char));
-        sprintf(s, "%s%s", req->request_path, DEFAULT_FILE);
-
-        assert(strlen(s) == strlen(req->request_path) + strlen(DEFAULT_FILE));
-        md_log(LOGDEBUG, "new request_path: %s", s);
-
-        free(req->request_path);
-        req->request_path = s;
-        md_log(LOGDEBUG, "requested file: %s", req->request_path);
+        n += strlen(DEFAULT_FILE);
+        f = DEFAULT_FILE;
+    } else {
+        f = "";
     }
+
+    char *s = calloc(n + 1, sizeof(char));
+
+    sprintf(s, "%s%s%s", DOCROOT, req->request_path, f);
+
+    assert(strlen(s) == n);
+    md_log(LOGDEBUG, "new request_path: %s", s);
+
+    free(req->request_path);
+    req->request_path = s;
+    md_log(LOGDEBUG, "requested file: %s", req->request_path);
+
     if(req->request_path == NULL || req->request_uri == NULL) {
         return GET_NOT_VALID;
-    } else if (stat(req->request_path + 1, NULL) < 0 && errno == ENOENT) {
+    } else if (stat(req->request_path, NULL) < 0 && errno == ENOENT) {
         *(req->request_path + strlen(req->request_path) - 2) = '\0';
-        if (stat(req->request_path + 1, NULL) < 0 && errno == ENOENT) {
+        if (stat(req->request_path, NULL) < 0 && errno == ENOENT) {
             return GET_NOT_FOUND;
         }
     }
@@ -250,7 +281,7 @@ int md_send_get_response(conn_state* state) {
 
     md_res_write(state->conn, res);
 
-    if( (file_fd = open(req->request_path + 1, O_RDONLY)) < 0 ) {
+    if( (file_fd = open(req->request_path, O_RDONLY)) < 0 ) {
        md_fatal("error opening file: %s", req->request_path);
     }
 
@@ -302,14 +333,13 @@ int md_send_404_response(conn_state* state) {
 int md_cleanup(conn_state* state) {
     close(state->conn->open_sd);
     TRACE();
-    md_log(LOGDEBUG, "conn address is %llx", (long long) state->conn);
 
     if(state->old_conn != NULL) {
         free(state->old_conn);
     }
     state->old_conn = state->conn;
 
-    free(state->res);
+    free(state->res); state->res = NULL;
     md_req_destroy((request *) state->parser->data);
     free(state->parser->data);
     free(state->parser);
