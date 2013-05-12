@@ -17,7 +17,6 @@ thread_info threads[N_THREADS];
 
 int main(int argc, char *argv[]){
 	int v;
-	int listen_address;
 	struct sockaddr_in servaddr;
 
 	struct ev_loop* default_loop;
@@ -30,10 +29,8 @@ int main(int argc, char *argv[]){
 	md_set_state_actions(&state_actions);
 
 	/* inet_pton(AF_INET, ADDRESS, &listen_address); */
-	listen_address = htonl(INADDR_ANY);
-
 	servaddr.sin_family = AF_INET;
-	servaddr.sin_addr.s_addr = htonl(listen_address);
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	servaddr.sin_port = htons(PORT);
 
 	v = 1;
@@ -53,10 +50,10 @@ int main(int argc, char *argv[]){
 
 	// unlink the semaphore names because they persist after program exit/crash/terminate
 	// see sem
-	if( (sem_unlink("sem_q_empty") != 0 && errno != ENOENT) ||
-		(sem_unlink("sem_q_full") != 0 && errno != ENOENT) ||
-		(queue_info.sem_q_empty = sem_open("sem_q_empty", O_CREAT, 0600, MAXQUEUESIZE)) == SEM_FAILED ||
-		(queue_info.sem_q_full = sem_open("sem_q_full", O_CREAT, 0600, 0)) == SEM_FAILED ||
+	if( (sem_unlink("/sem_q_empty") != 0 && errno != ENOENT) ||
+		(sem_unlink("/sem_q_full") != 0 && errno != ENOENT) ||
+		(queue_info.sem_q_empty = sem_open("/sem_q_empty", O_CREAT, 0600, MAXQUEUESIZE)) == SEM_FAILED ||
+		(queue_info.sem_q_full = sem_open("/sem_q_full", O_CREAT, 0600, 0)) == SEM_FAILED ||
 		pthread_mutex_init(&(queue_info.mtx_conn_queue), NULL) != 0 ) {
 			md_fatal("queue sem/mutex create fail");
 	}
