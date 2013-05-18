@@ -38,7 +38,7 @@ All rights reserved
 
 /* CONSTANT DEFINITIONS */
 #define DEBUG	1
-#define N_THREADS 2
+#define N_THREADS 1
 
 #define RESSIZE			8 * 1024
 #define REQSIZE			8 * 1024
@@ -55,7 +55,7 @@ All rights reserved
 /* logging levels */
 enum {
 	LOGNONE,
-	LOGPANIC,
+	LOGFATAL,
 	LOGERR,
 	LOGINFO,
 	LOGDEBUG
@@ -165,13 +165,10 @@ typedef struct conn_state {
 	conn_data* old_conn;
 
 	int cs;
-
-	int nread;
 } conn_state;
 
 typedef struct thread_info {
 	pthread_t thread_id;
-	sem_t* quit;
 } thread_info;
 
 typedef int (*conn_state_cb)(conn_state* state);
@@ -254,13 +251,13 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 /* spoilers: everyone dies */
 #define md_fatal(m, ...)	\
 		do {	\
-		    if(LOGPANIC <= log_info.log_level) {	\
+		    if(LOGFATAL <= log_info.log_level) {	\
 		    	log_info.ticks = time(NULL);	\
 				log_info.current_time = localtime(&log_info.ticks);	\
 				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMEFMT, log_info.current_time);	\
 		        pthread_mutex_lock(&log_info.mtx_term);	\
 		        fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
-		        fprintf(LOG_FD, "%x:\t> %s:%d:%s:\tpanic: \"", (unsigned int) pthread_self(), __FILE__, __LINE__, __FUNCTION__);	\
+		        fprintf(LOG_FD, "%x:\t> %s:%d:%s:\tfatal: \"", (unsigned int) pthread_self(), __FILE__, __LINE__, __FUNCTION__);	\
 		        fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 		        fprintf(LOG_FD, "\"\n");	\
 		        pthread_mutex_unlock(&log_info.mtx_term);	\
@@ -311,7 +308,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 #define md_req_read(c, r)	\
 		do {	\
 			if ( ((r)->buffer_index += read((c)->open_sd,	\
-			(r)->buffer, REQSIZE - (r)->buffer_index) - 1) < 0) {	\
+			(r)->buffer, REQSIZE - (r)->buffer_index)) < 0) {	\
 				md_fatal("read request fail from %s, sd: %d", inet_ntoa((c)->conn_info.sin_addr), (c)->open_sd);	\
             }	\
             assert((r)->buffer_index < REQSIZE - 1);	\

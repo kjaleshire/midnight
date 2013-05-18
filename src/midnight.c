@@ -7,30 +7,35 @@ All rights reserved
 
 */
 
-#include "midnight.h"
-
 #define PORT 8080
 #define ADDRESS "127.0.0.1"
 
-int listen_sd;
+#include "midnight.h"
+
 thread_info threads[N_THREADS];
+int listen_sd;
 
 int main(int argc, char *argv[]){
-	int v;
+	int v, listen_address;
 	struct sockaddr_in servaddr;
 
 	struct ev_loop* default_loop;
 	ev_io* watcher_accept = malloc(sizeof(ev_io));
 	ev_signal* watcher_sigint = malloc(sizeof(ev_signal));
 
+	#ifdef DEBUG
 	log_info.log_level = LOGDEBUG;
+	#else
+	log_info.log_level = LOGINFO;
+	#endif
 
-	md_log_init();
 	md_set_state_actions(&state_actions);
 
 	/* inet_pton(AF_INET, ADDRESS, &listen_address); */
+	listen_address = htonl(INADDR_ANY);
+
 	servaddr.sin_family = AF_INET;
-	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_addr.s_addr = htonl(listen_address);
 	servaddr.sin_port = htons(PORT);
 
 	v = 1;
@@ -41,31 +46,28 @@ int main(int argc, char *argv[]){
 		bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
 		listen(listen_sd, LISTENQ) < 0
 	) {
-		md_fatal("socket create & bind fail on %s",
-			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : ADDRESS);
+		md_fatal("socket create & bind fail on %s", "INADDR_ANY");
 	}
 	else {
 		TRACE();
 	}
 
-	// unlink the semaphore names because they persist after program exit/crash/terminate
-	// see sem
-	if( (sem_unlink("/sem_q_empty") != 0 && errno != ENOENT) ||
-		(sem_unlink("/sem_q_full") != 0 && errno != ENOENT) ||
-		(queue_info.sem_q_empty = sem_open("/sem_q_empty", O_CREAT, 0600, MAXQUEUESIZE)) == SEM_FAILED ||
-		(queue_info.sem_q_full = sem_open("/sem_q_full", O_CREAT, 0600, 0)) == SEM_FAILED ||
-		pthread_mutex_init(&(queue_info.mtx_conn_queue), NULL) != 0 ) {
-			md_fatal("queue sem/mutex create fail");
+	if( (queue_info.sem_q_empty = sem_open("empty", O_CREAT, 0644, MAXQUEUESIZE)) == SEM_FAILED ||
+		(queue_info.sem_q_full = sem_open("full", O_CREAT, 0644, 0)) == SEM_FAILED ||
+		(sem_unlink("empty") != 0 && errno != ENOENT) ||
+		(sem_unlink("full") != 0 && errno != ENOENT) )
+		 {
+			md_fatal("queue semaphore create fail");
+	}
+
+	if( pthread_mutex_init(&queue_info.mtx_conn_queue, NULL) != 0 ) {
+		md_fatal("queue mutex create fail");
 	}
 
 	STAILQ_INIT(&(queue_info.conn_queue));
 
 	for(v = 0; v < N_THREADS; v++) {
-		char c[8];
-		snprintf(c, sizeof(c), "tID %d", v);
-		if( (sem_unlink(c) != 0 && errno != ENOENT) ||
-			(threads[v].quit = sem_open(c, O_CREAT, 0644, 0)) == SEM_FAILED ||
-			pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) md_worker, &threads[v]) < 0) {
+		if(	pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) md_worker, &threads[v]) < 0) {
 			md_fatal("thread pool spawn fail");
 		}
 	}
@@ -121,6 +123,11 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) 
 		STAILQ_INSERT_TAIL(&queue_info.conn_queue, conn, q_next);
 		pthread_mutex_unlock(&queue_info.mtx_conn_queue);
 		sem_post(queue_info.sem_q_full);
+	}
+
+	if( sem_close(queue_info.sem_q_full) != 0 ||
+		sem_close(queue_info.sem_q_empty) != 0 ) {
+		md_log(LOGDEBUG, "queue semaphore unlink fail:%d", errno);
 	}
 
 	for(int i = 0; i < N_THREADS; i++) {

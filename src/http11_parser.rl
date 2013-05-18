@@ -265,8 +265,6 @@ size_t http_parser_execute(http_parser *parser, const char *buffer, size_t len, 
 	parser->cs = cs;
 	parser->nread += p - (buffer + off);
 
-    md_log(LOGDEBUG, "len: %lu, nread: %lu, mark: %lu", len, parser->nread, parser->mark);
-
 	assert(p <= pe && "buffer overflow after parsing execute");
 	assert(parser->nread <= len && "nread longer than length");
 	assert(parser->body_start <= len && "body starts after buffer end");
@@ -284,10 +282,6 @@ size_t http_parser_execute(http_parser *parser, const char *buffer, size_t len, 
 
 int http_parser_finish(http_parser *parser)
 {
-  int cs = parser->cs;
-
-  parser->cs = cs;
-
   if (http_parser_has_error(parser) ) {
 	return -1;
   } else if (http_parser_is_finished(parser) ) {
@@ -302,7 +296,7 @@ int http_parser_has_error(http_parser *parser) {
 }
 
 int http_parser_is_finished(http_parser *parser) {
-  return parser->cs == http_parser_first_final;
+  return parser->cs >= http_parser_first_final;
 }
 
 /* header parser function */

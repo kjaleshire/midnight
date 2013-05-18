@@ -11,13 +11,15 @@ All rights reserved
 #include "events.h"
 
 #ifdef DEBUG
-#define CALL(A) md_log(LOGDEBUG, "event: %d", event); next = state_actions.A(state)
+#define CALL(A) md_log(LOGDEBUG, "event trigger: %d", event); next = state_actions.A(state)
 #else
 #define CALL(A) next = state_actions.A(state)
 #endif
 
 %%{
     machine StateActions;
+
+    import "events.h";
 
     alphtype int;
 
@@ -32,7 +34,36 @@ All rights reserved
     action send_404_response { CALL(send_404_response); }
     action cleanup { CALL(cleanup); }
 
-    include ConnectionState "connection_state.rl";
+    connection = (
+        start: (
+            OPEN @parse_init -> parse_continue
+        ),
+
+        parse_continue: (
+            PARSE @parse_exec -> parse_continue             |
+            PARSE_DONE @read_request_method -> request_read |
+            PARSE_ERROR @send_request_invalid -> close      |
+            CLOSE @cleanup -> final
+        ),
+
+        request_read: (
+            GET_REQUEST @validate_get -> get_validating     |
+            INV_REQUEST @send_request_invalid -> close
+        ),
+
+        get_validating: (
+            GET_VALID @send_get_response -> close           |
+            GET_NOT_VALID @send_request_invalid -> close    |
+            GET_NOT_FOUND @send_404_response -> close
+        )
+
+        close: (
+            CLOSE @cleanup -> final
+        )
+    );
+
+    main := (connection)*;
+
 }%%
 
 %% write data;
@@ -105,8 +136,6 @@ int md_state_init(conn_state* state) {
 
     %% write init;
 
-    state->nread = 0;
-
     return 1;
 }
 
@@ -134,8 +163,7 @@ int md_parse_exec(conn_state* state) {
 
     /* TODO replace assert here with handler in case request is larger than REQSIZE */
     assert(req->buffer_index < REQSIZE && "request size too large. refactor into HTTP Error 413");
-    state->nread = http_parser_execute(state->parser, req->buffer, req->buffer_index, state->nread);
-    md_log(LOGDEBUG, "nread: %d", state->nread);
+    http_parser_execute(state->parser, req->buffer, req->buffer_index, state->parser->nread);
     TRACE();
     if(http_parser_has_error(state->parser)) {
         return PARSE_ERROR;
@@ -156,14 +184,14 @@ int md_read_request_method(conn_state* state) {
 
     res = state->res;
 
+    md_res_init(res);
+
     time_t ticks = time(NULL);
 
     res->http_version = HTTP11;
     res->current_time = ctime(&ticks);
     res->servername = SERVER_NAME;
     res->connection = CONN_CLOSE;
-
-    md_res_init(res);
 
     TRACE();
 
@@ -331,6 +359,7 @@ int md_send_404_response(conn_state* state) {
 }
 
 int md_cleanup(conn_state* state) {
+    char* buffer = ((request*) state->parser->data)->buffer;
     close(state->conn->open_sd);
     TRACE();
 
