@@ -247,7 +247,6 @@ void http_parser_init(http_parser *parser)  {
 
 /** exec **/
 size_t http_parser_execute(http_parser *parser, const char *buffer, size_t len, size_t off)  {
-
 	const char *p, *pe;
 	int cs = parser->cs;
 
@@ -282,21 +281,21 @@ size_t http_parser_execute(http_parser *parser, const char *buffer, size_t len, 
 
 int http_parser_finish(http_parser *parser)
 {
-  if (http_parser_has_error(parser) ) {
-	return -1;
-  } else if (http_parser_is_finished(parser) ) {
-	return 1;
-  } else {
-	return 0;
-  }
+    if (http_parser_has_error(parser) ) {
+        return -1;
+    } else if (http_parser_is_finished(parser) ) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
 int http_parser_has_error(http_parser *parser) {
-  return parser->cs == http_parser_error;
+    return parser->cs == http_parser_error;
 }
 
 int http_parser_is_finished(http_parser *parser) {
-  return parser->cs >= http_parser_first_final;
+    return parser->cs >= http_parser_first_final;
 }
 
 /* header parser function */
@@ -314,7 +313,7 @@ void md_http_field(void *data, const char *field, size_t flen, const char *value
 	new_entry->key = f;
 	new_entry->value = v;
 
-	HASH_ADD_KEYPTR(hh, ((request *) data)->table, new_entry->key, strlen(new_entry->key), new_entry);
+  md_dict_add(new_entry->key, new_entry);
 }
 
 void md_request_method(void *data, const char *at, size_t length) {

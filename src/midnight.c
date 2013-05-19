@@ -94,7 +94,7 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 		md_fatal("accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));
 	} else {
 		#ifdef DEBUG
-		md_log(LOGDEBUG, "accepted client %s, descriptor %d", inet_ntoa(conn->conn_info.sin_addr), conn->open_sd);
+		md_log(LOGDEBUG, "accepted client %s", inet_ntoa(conn->conn_info.sin_addr));
 		#endif
 	}
 
@@ -106,7 +106,7 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 
 	TRACE();
 	#ifdef DEBUG
-	md_log(LOGDEBUG, "enqueued client %s, descriptor %d", inet_ntoa(conn->conn_info.sin_addr), conn->open_sd);
+	md_log(LOGDEBUG, "enqueued client %s", inet_ntoa(conn->conn_info.sin_addr));
 	#endif
 }
 
@@ -127,7 +127,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) 
 
 	if( sem_close(queue_info.sem_q_full) != 0 ||
 		sem_close(queue_info.sem_q_empty) != 0 ) {
-		md_log(LOGDEBUG, "queue semaphore unlink fail:%d", errno);
+		md_log(LOGDEBUG, "queue semaphore close fail:%d", errno);
 	}
 
 	for(int i = 0; i < N_THREADS; i++) {

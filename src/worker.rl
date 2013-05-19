@@ -218,6 +218,7 @@ int md_read_request_method(conn_state* state) {
 }
 
 int md_send_request_invalid(conn_state* state) {
+    request* req = (request*) state->parser->data;
     response* res;
     time_t ticks;
 
@@ -303,7 +304,7 @@ int md_send_get_response(conn_state* state) {
     int file_fd;
 
     res->status = OK_S;
-    res->content_type = MIME_HTML;
+    res->content_type = md_detect_type(req->request_path);
     res->charset = CHARSET;
     res->expires = EXPIRES_NEVER;
 
@@ -313,15 +314,23 @@ int md_send_get_response(conn_state* state) {
        md_fatal("error opening file: %s", req->request_path);
     }
 
-    while( (v = read(file_fd, buffer + index, READBUFF - index)) != 0 ) {
-        if(v < 0) md_fatal("read file failure, descriptor: %d", file_fd);
+    for(;;) {
+        v = read(file_fd, buffer + index, READBUFF - index);
+        if(v < 0) {
+            md_fatal("read file failure, descriptor: %d", file_fd);
+        } else if (v == 0 && index == 0) {
+            break;
+        }
         index += v;
+        md_log(LOGDEBUG, "%d bytes read", v);
         assert(index <= READBUFF && "index is bigger than buffer size");
         if( index == READBUFF || (index > 0 && v == 0) ) {
-            if( (v = write(state->conn->open_sd, buffer, READBUFF)) < 0 ) {
+            md_log(LOGDEBUG, "writting %d bytes to socket", v);
+            if( (v = write(state->conn->open_sd, buffer, index)) < 0 ) {
                 if(errno == ECONNRESET) {
-                    md_log(LOGINFO, "connection to %s closed", inet_ntoa(state->conn->conn_info.sin_addr));
-                    break;
+                    TRACE();
+                    close(file_fd);
+                    return CLOSE;
                 } else {
                     md_fatal("connection write failure, client %s", inet_ntoa(state->conn->conn_info.sin_addr));
                 }
@@ -359,7 +368,6 @@ int md_send_404_response(conn_state* state) {
 }
 
 int md_cleanup(conn_state* state) {
-    char* buffer = ((request*) state->parser->data)->buffer;
     close(state->conn->open_sd);
     TRACE();
 
@@ -374,4 +382,27 @@ int md_cleanup(conn_state* state) {
     free(state->parser);
 
     return DONE;
+}
+
+char* md_detect_type(char* filename) {
+    char *c;
+    if( (c = strrchr(filename, '.')) == NULL || strcmp(c, ".txt") == 0 ) {
+        c = MIME_TXT;
+    } else if( strcmp(c, ".html") == 0 || strcmp(c, ".htm") == 0) {
+        c = MIME_HTML;
+    } else if( strcmp(c, ".jpeg") == 0 || strcmp(c, ".jpg") == 0) {
+        c = MIME_JPG;
+    } else if( strcmp(c, ".gif") == 0 ) {
+        c = MIME_GIF;
+    } else if( strcmp(c, ".png") == 0 ) {
+        c = MIME_PNG;
+    } else if( strcmp(c, ".css") == 0 ) {
+        c = MIME_CSS;
+    } else if( strcmp(c, ".js") == 0 ) {
+        c = MIME_JS;
+    } else {
+        c = MIME_TXT;
+    }
+    md_log(LOGDEBUG, "detected MIME type: %s", c);
+    return c;
 }

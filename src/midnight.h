@@ -44,7 +44,7 @@ All rights reserved
 #define REQSIZE			8 * 1024
 #define READBUFF		16 * 1024
 #define LISTENQ			1024
-#define MAXQUEUESIZE	N_THREADS * 2
+#define MAXQUEUESIZE	N_THREADS * 4
 #define TIMEFMT			"%H:%M:%S %m.%d.%y"
 #define TIMESTAMP_SIZE	32
 
@@ -213,6 +213,8 @@ int md_send_request_invalid(conn_state* state);
 int md_send_404_response(conn_state* state);
 int md_cleanup(conn_state* state);
 
+char* md_detect_type(char* filename);
+
 void md_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
 void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 
@@ -307,8 +309,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 
 #define md_req_read(c, r)	\
 		do {	\
-			if ( ((r)->buffer_index += read((c)->open_sd,	\
-			(r)->buffer, REQSIZE - (r)->buffer_index)) < 0) {	\
+			if ( ((r)->buffer_index += read((c)->open_sd, (r)->buffer + (r)->buffer_index, REQSIZE - (r)->buffer_index)) < 0) {	\
 				md_fatal("read request fail from %s, sd: %d", inet_ntoa((c)->conn_info.sin_addr), (c)->open_sd);	\
             }	\
             assert((r)->buffer_index < REQSIZE - 1);	\
@@ -371,6 +372,11 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 			(a)->send_request_invalid = md_send_request_invalid;	\
 			(a)->send_404_response = md_send_404_response;	\
 			(a)->cleanup = md_cleanup;	\
+		} while(0)
+
+#define md_dict_add(k, n)	\
+		do {	\
+			HASH_ADD_KEYPTR(hh, ((request *) data)->table, k, strlen(k), n);	\
 		} while(0)
 
 #endif /* midnight_h */
