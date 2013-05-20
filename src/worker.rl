@@ -74,7 +74,7 @@ void md_worker(thread_info *opts) {
 
     state = malloc(sizeof(conn_state));
 
-    for(;;) {
+    while(!opts->thread_continue) {
         #ifdef DEBUG
         md_log(LOGDEBUG, "awaiting new connection");
         #endif
@@ -89,12 +89,8 @@ void md_worker(thread_info *opts) {
         pthread_mutex_unlock(&queue_info.mtx_conn_queue);
         sem_post(queue_info.sem_q_empty);
 
-        if(state->conn->open_sd == 0) {
-            #ifdef DEBUG
-            md_log(LOGDEBUG, "thread quitting!");
-            #endif
-            int i = 0;
-            pthread_exit(&i);
+        if(state->conn->open_sd == -1) {
+            break;
         }
 
         #ifdef DEBUG
@@ -106,12 +102,22 @@ void md_worker(thread_info *opts) {
         md_state_init(state);
 
         for(;;) {
-            if(next == DONE) break;
+            if(next == DONE) {
+                break;
+            }
             next = md_state_event(state, next);
         }
 
+        #ifdef DEBUG
         md_log(LOGDEBUG, "finished handling connection");
+        #endif
     }
+
+    #ifdef DEBUG
+    md_log(LOGDEBUG, "thread quitting!");
+    #endif
+    next = 0;
+    pthread_exit(&next);
 }
 
 int md_state_event(conn_state* state, int event) {
@@ -156,7 +162,6 @@ int md_parse_exec(conn_state* state) {
 
     TRACE();
     md_req_read(state->conn, req);
-    /*md_log(LOGDEBUG, "%s", req->buffer);*/
     if(req->buffer_index == 0) {
         return CLOSE;
     }
@@ -234,7 +239,7 @@ int md_send_request_invalid(conn_state* state) {
     res = state->res;
 
     TRACE();
-    md_log(LOGDEBUG, "500 Internal Server Error");
+    md_log(LOGINFO, "500 Internal Server Error");
 
     res->status = SRVERR_S;
     res->content_type = MIME_HTML;
@@ -332,7 +337,8 @@ int md_send_get_response(conn_state* state) {
                     close(file_fd);
                     return CLOSE;
                 } else {
-                    md_fatal("connection write failure, client %s", inet_ntoa(state->conn->conn_info.sin_addr));
+                    char *s = strerror(errno);
+                    md_fatal("connection write failure, client %s, errno: %s", inet_ntoa(state->conn->conn_info.sin_addr), s);
                 }
             }
             index = 0;

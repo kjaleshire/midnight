@@ -12,8 +12,8 @@ All rights reserved
 
 #include "midnight.h"
 
-thread_info threads[N_THREADS];
 int listen_sd;
+thread_info threads[N_THREADS];
 
 int main(int argc, char *argv[]){
 	int v, listen_address;
@@ -57,7 +57,8 @@ int main(int argc, char *argv[]){
 		(sem_unlink("empty") != 0 && errno != ENOENT) ||
 		(sem_unlink("full") != 0 && errno != ENOENT) )
 		 {
-			md_fatal("queue semaphore create fail");
+		 	char *s = strerror(errno);
+			md_fatal("queue semaphore create fail: %s", s);
 	}
 
 	if( pthread_mutex_init(&queue_info.mtx_conn_queue, NULL) != 0 ) {
@@ -67,6 +68,7 @@ int main(int argc, char *argv[]){
 	STAILQ_INIT(&(queue_info.conn_queue));
 
 	for(v = 0; v < N_THREADS; v++) {
+		threads[v].thread_continue = 0;
 		if(	pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) md_worker, &threads[v]) < 0) {
 			md_fatal("thread pool spawn fail");
 		}
@@ -113,21 +115,21 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
 	TRACE();
 	close(listen_sd);
-	conn_data *conn;
+	conn_data no_conn[N_THREADS];
 
 	for(int i = 0; i < N_THREADS; i++) {
+		no_conn[i].open_sd = -1;
 		sem_wait(queue_info.sem_q_empty);
 		pthread_mutex_lock(&queue_info.mtx_conn_queue);
-		conn = malloc(sizeof(conn_data));
-		conn->open_sd = 0;
-		STAILQ_INSERT_TAIL(&queue_info.conn_queue, conn, q_next);
+		STAILQ_INSERT_TAIL(&queue_info.conn_queue, &no_conn[i], q_next);
 		pthread_mutex_unlock(&queue_info.mtx_conn_queue);
 		sem_post(queue_info.sem_q_full);
 	}
 
 	if( sem_close(queue_info.sem_q_full) != 0 ||
 		sem_close(queue_info.sem_q_empty) != 0 ) {
-		md_log(LOGDEBUG, "queue semaphore close fail:%d", errno);
+		char *s = strerror(errno);
+		md_log(LOGDEBUG, "queue semaphore close fail: %s", s);
 	}
 
 	for(int i = 0; i < N_THREADS; i++) {

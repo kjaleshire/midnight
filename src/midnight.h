@@ -25,7 +25,6 @@ All rights reserved
 #include <unistd.h>
 #include <sys/un.h>
 #include <pthread.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <assert.h>
 #include <time.h>
@@ -169,6 +168,7 @@ typedef struct conn_state {
 
 typedef struct thread_info {
 	pthread_t thread_id;
+	int thread_continue;
 } thread_info;
 
 typedef int (*conn_state_cb)(conn_state* state);
@@ -200,6 +200,8 @@ struct {
 } log_info;
 
 void md_worker(thread_info* opts);
+
+void sig_usr1_handler(int signum);
 
 int md_state_init(conn_state* state);
 int md_state_event(conn_state* state, int event);
