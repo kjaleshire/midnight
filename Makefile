@@ -1,7 +1,7 @@
 CC=clang
 CFLAGS=-lev
 ANALYZEFLAGS=--analyze -Wall
-DEBUGFLAGS=-O0 -g
+DEBUGFLAGS=-O0 -g -DDEBUG
 PRODFLAGS=-04
 SOURCE=src/midnight.c $(RAGELTARGET)
 RAGELSOURCE=src/http11_parser.rl src/worker.rl

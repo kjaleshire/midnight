@@ -36,10 +36,9 @@ All rights reserved
 #include "uthash.h"				// hash table macros
 
 /* CONSTANT DEFINITIONS */
-#define DEBUG	1
 #define N_THREADS 1
 
-#define RESSIZE			8 * 1024
+#define RESPSIZE			8 * 1024
 #define REQSIZE			8 * 1024
 #define READBUFF		16 * 1024
 #define LISTENQ			1024
@@ -124,7 +123,7 @@ typedef struct http_header {
 } http_header;
 
 typedef struct response {
-    char buffer[RESSIZE];
+    char buffer[RESPSIZE];
     int buffer_index;
 
     char* content_type;
@@ -283,8 +282,8 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 #define md_res_buff(r, m, ...)	\
 		do {	\
 			(r)->buffer_index += snprintf(&((r)->buffer[(r)->buffer_index]), \
-			RESSIZE - (r)->buffer_index, (m), ##__VA_ARGS__);	\
-			assert((r)->buffer_index < RESSIZE);	\
+			RESPSIZE - (r)->buffer_index, (m), ##__VA_ARGS__);	\
+			assert((r)->buffer_index < RESPSIZE);	\
 		} while(0)
 
 #define md_res_write(c, r)	\

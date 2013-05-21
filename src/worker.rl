@@ -297,6 +297,7 @@ int md_validate_get(conn_state* state) {
 int md_send_get_response(conn_state* state) {
     response* res = state->res;
     request* req = (request *) state->parser->data;
+    off_t file_len;
 
     TRACE();
     #ifdef DEBUG
@@ -316,33 +317,14 @@ int md_send_get_response(conn_state* state) {
     md_res_write(state->conn, res);
 
     if( (file_fd = open(req->request_path, O_RDONLY)) < 0 ) {
-       md_fatal("error opening file: %s", req->request_path);
+        char *s = strerror(errno);
+        md_fatal("error opening file: %s", s);
     }
 
-    for(;;) {
-        v = read(file_fd, buffer + index, READBUFF - index);
-        if(v < 0) {
-            md_fatal("read file failure, descriptor: %d", file_fd);
-        } else if (v == 0 && index == 0) {
-            break;
-        }
-        index += v;
-        md_log(LOGDEBUG, "%d bytes read", v);
-        assert(index <= READBUFF && "index is bigger than buffer size");
-        if( index == READBUFF || (index > 0 && v == 0) ) {
-            md_log(LOGDEBUG, "writting %d bytes to socket", v);
-            if( (v = write(state->conn->open_sd, buffer, index)) < 0 ) {
-                if(errno == ECONNRESET) {
-                    TRACE();
-                    close(file_fd);
-                    return CLOSE;
-                } else {
-                    char *s = strerror(errno);
-                    md_fatal("connection write failure, client %s, errno: %s", inet_ntoa(state->conn->conn_info.sin_addr), s);
-                }
-            }
-            index = 0;
-        }
+    file_len = 0;
+    if( sendfile(file_fd, state->conn->open_sd, 0, &file_len, NULL, 0) < 0 ) {
+        char *s = strerror(errno);
+        md_fatal("error writing file: %s", s);
     }
 
     TRACE();
