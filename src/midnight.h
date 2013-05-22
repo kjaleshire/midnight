@@ -29,20 +29,18 @@ All rights reserved
 #include <assert.h>
 #include <time.h>
 #include <semaphore.h>
-#include <copyfile.h>
+#include <getopt.h>
 #include <ev.h>					// libev event handler
 #include <sys/queue.h>			// queue macros
 #include "http11_parser.h"		// parser header
 #include "uthash.h"				// hash table macros
 
 /* CONSTANT DEFINITIONS */
-#define N_THREADS 1
-
-#define RESPSIZE			8 * 1024
+#define RESPSIZE		8 * 1024
 #define REQSIZE			8 * 1024
 #define READBUFF		16 * 1024
 #define LISTENQ			1024
-#define MAXQUEUESIZE	N_THREADS * 4
+#define MAXQUEUESIZE	4
 #define TIMEFMT			"%H:%M:%S %m.%d.%y"
 #define TIMESTAMP_SIZE	32
 
@@ -72,9 +70,10 @@ enum {
 #define NF_S			"404 Not Found"
 #define SRVERR_S		"500 Internal Server Error"
 
-/* default filename */
+/* defaults */
+#define DEFAULT_PORT		8080
 #define DEFAULT_FILE	"index.html"
-#define DOCROOT			"site"
+#define DEFAULT_DOCROOT			"docroot"
 
 /* headers */
 #define DATE_H			"Date:"
@@ -87,7 +86,7 @@ enum {
 /* header stock values	*/
 #define CONN_CLOSE		"close"
 #define CONN_KEEPALIVE	"keep-alive"
-#define SERVER_NAME		"midnight"
+#define APP_NAME		"midnight"
 #define EXPIRES_NEVER	"-1"
 
 /* MIME types... */
@@ -198,6 +197,23 @@ struct {
 	pthread_mutex_t mtx_term;
 } log_info;
 
+struct {
+	int n_threads;
+	char* docroot;
+	uint16_t port;
+	uint32_t address;
+} options_info;
+
+static struct option optstruct[] = {
+	{ "help", no_argument, NULL, 'h'},
+	{ "verbose", no_argument, NULL, 'e'},
+	{ "quiet", no_argument, NULL, 'q'},
+	{ "port", required_argument, NULL, 'p'},
+	{ "address", required_argument, NULL, 'a'},
+	{ "docroot", required_argument, NULL, 'd'},
+	{ "nthreads", required_argument, NULL, 't'}
+};
+
 void md_worker(thread_info* opts);
 
 void sig_usr1_handler(int signum);
@@ -277,6 +293,14 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 	            printf("System error: unable to initialize terminal mutex");	\
 	            exit(ERRSYS);	\
         	}	\
+		} while(0)
+
+#define md_options_init()	\
+		do {	\
+			options_info.n_threads = 2;	\
+			options_info.address = htonl(INADDR_ANY);	\
+			options_info.port = htons(DEFAULT_PORT);	\
+			options_info.docroot = DEFAULT_DOCROOT;	\
 		} while(0)
 
 #define md_res_buff(r, m, ...)	\

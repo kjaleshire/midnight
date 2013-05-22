@@ -11,11 +11,12 @@ Build (inside 'midnight' directory):
 
 ####OPTIONS
 -h, --help			help information
--v, --verbose 		verbose
--p, --port			port to listen on
--a, --address 		IP address to bind to
--d, --docroot		HTML document root
--n, --nthread		number of threads to run with
+-e, --verbose 		verbose
+-p, --port			port to listen on (default: 8080)
+-a, --address 		IP address to bind to (default: all)
+-d, --docroot		HTML document root (default: ./docroot)
+-n, --nthreads		number of threads to run with (default: 2)
+-q, --quiet			run silently
 
 ####CREDITS
 Includes Zed Shaw's famous, fast & secure HTTP request parser.
