@@ -7,36 +7,64 @@ All rights reserved
 
 */
 
-#define PORT 8080
-#define ADDRESS "127.0.0.1"
-
 #include "midnight.h"
 
 int listen_sd;
-thread_info threads[N_THREADS];
+thread_info *threads;
 
 int main(int argc, char *argv[]){
-	int v, listen_address;
+	int v;
 	struct sockaddr_in servaddr;
 
 	struct ev_loop* default_loop;
 	ev_io* watcher_accept = malloc(sizeof(ev_io));
 	ev_signal* watcher_sigint = malloc(sizeof(ev_signal));
 
+	md_options_init();
+
+	while( (v = getopt_long(argc, argv, "hvqp:a:d:t:", optstruct, NULL)) != -1 ) {
+		switch(v) {
+			case 'h':
+				//md_usage();
+				printf("boo! help!\n");
+				exit(0);
+			case 'e':
+				log_info.log_level = LOGINFO;
+				break;
+			case 'q':
+				log_info.log_level = LOGNONE;
+				break;
+			case 'd':
+				options_info.docroot = optarg;
+				break;
+			case 'a':
+				inet_pton(AF_INET, optarg, &options_info.address);
+				break;
+			case 'p':
+				options_info.port = htons(atoi(optarg));
+				break;
+			case 't':
+				options_info.n_threads = atoi(optarg);
+				break;
+			case '?':
+			case ':':
+				printf("unknown option: %c\n", v);
+				exit(0);
+			default:
+				printf("invocation error\n");
+				exit(0);
+		}
+	}
+
 	#ifdef DEBUG
 	log_info.log_level = LOGDEBUG;
-	#else
-	log_info.log_level = LOGINFO;
 	#endif
 
 	md_set_state_actions(&state_actions);
 
-	/* inet_pton(AF_INET, ADDRESS, &listen_address); */
-	listen_address = htonl(INADDR_ANY);
-
 	servaddr.sin_family = AF_INET;
-	servaddr.sin_addr.s_addr = htonl(listen_address);
-	servaddr.sin_port = htons(PORT);
+	servaddr.sin_addr.s_addr = options_info.address;
+	servaddr.sin_port = options_info.port;
 
 	v = 1;
 	if( (listen_sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 ||
@@ -46,13 +74,14 @@ int main(int argc, char *argv[]){
 		bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
 		listen(listen_sd, LISTENQ) < 0
 	) {
-		md_fatal("socket create & bind fail on %s", "INADDR_ANY");
+		md_fatal("socket create & bind fail on %s",
+			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : inet_ntoa(servaddr.sin_addr));
 	}
 	else {
 		TRACE();
 	}
 
-	if( (queue_info.sem_q_empty = sem_open("empty", O_CREAT, 0644, MAXQUEUESIZE)) == SEM_FAILED ||
+	if( (queue_info.sem_q_empty = sem_open("empty", O_CREAT, 0644, options_info.n_threads * MAXQUEUESIZE)) == SEM_FAILED ||
 		(queue_info.sem_q_full = sem_open("full", O_CREAT, 0644, 0)) == SEM_FAILED ||
 		(sem_unlink("empty") != 0 && errno != ENOENT) ||
 		(sem_unlink("full") != 0 && errno != ENOENT) )
@@ -67,7 +96,8 @@ int main(int argc, char *argv[]){
 
 	STAILQ_INIT(&(queue_info.conn_queue));
 
-	for(v = 0; v < N_THREADS; v++) {
+	threads = calloc(options_info.n_threads, sizeof(thread_info));
+	for(v = 0; v < options_info.n_threads; v++) {
 		threads[v].thread_continue = 0;
 		if(	pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) md_worker, &threads[v]) < 0) {
 			md_fatal("thread pool spawn fail");
@@ -115,9 +145,9 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
 	TRACE();
 	close(listen_sd);
-	conn_data no_conn[N_THREADS];
+	conn_data no_conn[options_info.n_threads];
 
-	for(int i = 0; i < N_THREADS; i++) {
+	for(int i = 0; i < options_info.n_threads; i++) {
 		no_conn[i].open_sd = -1;
 		sem_wait(queue_info.sem_q_empty);
 		pthread_mutex_lock(&queue_info.mtx_conn_queue);
@@ -132,7 +162,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) 
 		md_log(LOGDEBUG, "queue semaphore close fail: %s", s);
 	}
 
-	for(int i = 0; i < N_THREADS; i++) {
+	for(int i = 0; i < options_info.n_threads; i++) {
 		pthread_join(threads[i].thread_id, NULL);
 	}
 	#ifdef DEBUG
