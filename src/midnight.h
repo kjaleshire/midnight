@@ -35,6 +35,14 @@ All rights reserved
 #include "http11_parser.h"		// parser header
 #include "uthash.h"				// hash table macros
 
+/* APP CONSTANTS */
+#define APP_NAME		"midnight"
+#define APP_DESC		"A simple threaded+evented HTTP server"
+#define MAJOR_V			0
+#define MINOR_V			1
+#define PATCH_V			3
+#define PRERELEASE_V	""
+
 /* CONSTANT DEFINITIONS */
 #define RESPSIZE		8 * 1024
 #define REQSIZE			8 * 1024
@@ -82,11 +90,12 @@ enum {
 #define SERVER_H		"Server:"
 #define HOST_H			"Host:"
 #define CONN_H			"Connection:"
+#define CONTENT_LENGTH_H	"Content-Length:"
 
 /* header stock values	*/
 #define CONN_CLOSE		"close"
 #define CONN_KEEPALIVE	"keep-alive"
-#define APP_NAME		"midnight"
+#define SERVER_NAME		APP_NAME
 #define EXPIRES_NEVER	"-1"
 
 /* MIME types... */
@@ -133,6 +142,7 @@ typedef struct response {
     char* expires;
     char* servername;
     char* connection;
+    char content_length[16];
     char* content;				// for testing only
 
     char* file;
@@ -206,12 +216,13 @@ struct {
 
 static struct option optstruct[] = {
 	{ "help", no_argument, NULL, 'h'},
-	{ "verbose", no_argument, NULL, 'e'},
+	{ "error", no_argument, NULL, 'e'},
 	{ "quiet", no_argument, NULL, 'q'},
 	{ "port", required_argument, NULL, 'p'},
 	{ "address", required_argument, NULL, 'a'},
 	{ "docroot", required_argument, NULL, 'd'},
-	{ "nthreads", required_argument, NULL, 't'}
+	{ "nthreads", required_argument, NULL, 't'},
+	{ "version", no_argument, NULL, 'v'}
 };
 
 void md_worker(thread_info* opts);
@@ -234,6 +245,7 @@ char* md_detect_type(char* filename);
 
 void md_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
 void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
+void md_usage();
 
 /* MACRO DEFINITIONS */
 #ifdef DEBUG
@@ -301,7 +313,9 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 			options_info.address = htonl(INADDR_ANY);	\
 			options_info.port = htons(DEFAULT_PORT);	\
 			options_info.docroot = DEFAULT_DOCROOT;	\
+			log_info.log_level = LOGINFO;	\
 		} while(0)
+#define md_version() printf("  %s version %d.%d.%d%s\n", APP_NAME, MAJOR_V, MINOR_V, PATCH_V, PRERELEASE_V)
 
 #define md_res_buff(r, m, ...)	\
 		do {	\
@@ -318,6 +332,8 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
     			md_res_buff((r), CONTENT_FMT, CONTENT_H, (r)->content_type, (r)->charset, CRLF); }	\
     		if((r)->current_time != NULL) {		\
     			md_res_buff((r), DATE_FMT, DATE_H, (r)->current_time, CRLF); }	\
+    		if((r)->content_length != NULL) {	\
+    			md_res_buff((r), HEADER_FMT, CONTENT_LENGTH_H, (r)->content_length, CRLF); }	\
     		if((r)->expires != NULL) {	\
     			md_res_buff((r), HEADER_FMT, EXPIRES_H, (r)->expires, CRLF); }	\
     		if((r)->expires != NULL) {	\
