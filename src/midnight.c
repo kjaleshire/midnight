@@ -22,14 +22,14 @@ int main(int argc, char *argv[]){
 
 	md_options_init();
 
-	while( (v = getopt_long(argc, argv, "hvqp:a:d:t:", optstruct, NULL)) != -1 ) {
+	#ifdef DEBUG
+	log_info.log_level = LOGDEBUG;
+	#endif
+
+	while( (v = getopt_long(argc, argv, "eqp:a:d:t:vh", optstruct, NULL)) != -1 ) {
 		switch(v) {
-			case 'h':
-				//md_usage();
-				printf("boo! help!\n");
-				exit(0);
 			case 'e':
-				log_info.log_level = LOGINFO;
+				log_info.log_level = LOGERR;
 				break;
 			case 'q':
 				log_info.log_level = LOGNONE;
@@ -41,24 +41,21 @@ int main(int argc, char *argv[]){
 				inet_pton(AF_INET, optarg, &options_info.address);
 				break;
 			case 'p':
-				options_info.port = htons(atoi(optarg));
+				options_info.port = htons(strtol(optarg, NULL, 0));
 				break;
 			case 't':
-				options_info.n_threads = atoi(optarg);
+				options_info.n_threads = strtol(optarg, NULL, 0);
 				break;
-			case '?':
-			case ':':
-				printf("unknown option: %c\n", v);
+			case 'v':
+				md_version();
 				exit(0);
+			case 'h':
 			default:
-				printf("invocation error\n");
+				md_version();
+				md_usage();
 				exit(0);
 		}
 	}
-
-	#ifdef DEBUG
-	log_info.log_level = LOGDEBUG;
-	#endif
 
 	md_set_state_actions(&state_actions);
 
@@ -169,4 +166,19 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) 
 	md_log(LOGDEBUG, "process quitting!");
 	#endif
 	exit(0);
+}
+
+void md_usage() {
+	printf("\n");
+	printf("  Usage:\n");
+	printf("\tmidnight [-hevq] [-t threadnum] [-a listenaddress] [-p listenport] [-d docroot]\n");
+	printf("  Options:\n");
+	printf("\t-h, --help\t\tthis help\n");
+	printf("\t-e, --error\t\terror-only logging\n");
+	printf("\t-q, --quiet\t\tno logging\n");
+	printf("\t-p, --port\t\tport to listen on (default 8080)\n");
+	printf("\t-a, --address\t\taddress to bind to (default all)\n");
+	printf("\t-d, --docroot\t\tsite document root directory (default ./docroot)\n");
+	printf("\t-t, --nthreads\t\tnumber of threads to run with (default 2)\n");
+	printf("\t-v, --version\t\tdisplay verison info\n");
 }

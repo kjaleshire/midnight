@@ -11,7 +11,7 @@ Build (inside 'midnight' directory):
 
 ####OPTIONS
 -h, --help			help information
--e, --verbose 		verbose
+-e, --error			error-only logging
 -p, --port			port to listen on (default: 8080)
 -a, --address 		IP address to bind to (default: all)
 -d, --docroot		HTML document root (default: ./docroot)

@@ -195,7 +195,7 @@ int md_read_request_method(conn_state* state) {
 
     res->http_version = HTTP11;
     res->current_time = ctime(&ticks);
-    res->servername = APP_NAME;
+    res->servername = SERVER_NAME;
     res->connection = CONN_CLOSE;
 
     TRACE();
@@ -212,7 +212,6 @@ int md_read_request_method(conn_state* state) {
     HASH_ITER(hh, req->table, s, tmp) {
         md_log(LOGDEBUG, "%s: %s", s->key, s->value);
     }
-    TRACE();
     #endif
 */
     state->res = res;
@@ -245,12 +244,12 @@ int md_send_request_invalid(conn_state* state) {
     res->status = SRVERR_S;
     res->content_type = MIME_HTML;
     res->charset = CHARSET;
-    res->content =  "<html>                                                             \
-                        <body>                                                          \
-                            <p style=\"font-weight: bold; font-size: 14px; text-align: center;\">   \
-                            500 Internal Server Error                                   \
-                            </p>                                                        \
-                        </body>                                                         \
+    res->content =  "<html>\n                                                             \
+                        <body>\n                                                          \
+                            <p style=\"font-weight: bold; font-size: 14px; text-align: center;\">\n   \
+                            500 Internal Server Error\n                                   \
+                            </p>\n                                                        \
+                        </body>\n                                                         \
                     </html>%s";
 
     md_res_write(state->conn, res);
@@ -309,7 +308,11 @@ int md_send_get_response(conn_state* state) {
     int v = 0;
     char buffer[READBUFF];
     int file_fd;
+    struct stat filestat;
 
+    assert( stat(req->request_path, &filestat) >=0 );
+
+    snprintf(res->content_length, 16,"%lld", filestat.st_size);
     res->status = OK_S;
     res->content_type = md_detect_type(req->request_path);
     res->charset = CHARSET;
@@ -343,12 +346,12 @@ int md_send_404_response(conn_state* state) {
     res->content_type = MIME_HTML;
     res->charset = CHARSET;
     res->expires = EXPIRES_NEVER;
-    res->content = "<html>                                                              \
-                        <body>                                                          \
-                            <p style=\"font-weight: bold; font-size: 14px; text-align: center;\">           \
-                            404 File Not Found                                          \
-                            </p>                                                        \
-                        </body>                                                         \
+    res->content = "<html>\n                                                            \
+                        <body>\n                                                        \
+                            <p style=\"font-weight: bold; font-size: 18px; text-align: center;\">\n         \
+                            404 File Not Found\n                                        \
+                            </p>\n                                                      \
+                        </body>\n                                                       \
                     </html>%s";
 
     md_res_write(state->conn, res);
