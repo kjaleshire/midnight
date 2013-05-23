@@ -26,3 +26,4 @@ midnight.sublime-project
 http11_parser.c
 worker.c
 site*
+docroot
