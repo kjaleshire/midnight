@@ -200,6 +200,7 @@ int md_read_request_method(conn_state* state) {
 
     TRACE();
 
+/*
     #ifdef DEBUG
     md_log(LOGDEBUG, "Request method: %s", req->request_method);
     md_log(LOGDEBUG, "Request URI: %s", req->request_uri);
@@ -212,8 +213,7 @@ int md_read_request_method(conn_state* state) {
         md_log(LOGDEBUG, "%s: %s", s->key, s->value);
     }
     #endif
-
-    TRACE();
+*/
     state->res = res;
     if(strcmp(req->request_method, GET) == 0) {
         return GET_REQUEST;
@@ -232,7 +232,7 @@ int md_send_request_invalid(conn_state* state) {
 
         state->res->http_version = HTTP11;
         state->res->current_time = ctime(&ticks);
-        state->res->servername = SERVER_NAME;
+        state->res->servername = APP_NAME;
         state->res->connection = CONN_CLOSE;
     }
 
@@ -244,12 +244,12 @@ int md_send_request_invalid(conn_state* state) {
     res->status = SRVERR_S;
     res->content_type = MIME_HTML;
     res->charset = CHARSET;
-    res->content =  "<html>                                                             \
-                        <body>                                                          \
-                            <p style=\"font-weight: bold; font-size: 14px; text-align: center;\">   \
-                            500 Internal Server Error                                   \
-                            </p>                                                        \
-                        </body>                                                         \
+    res->content =  "<html>\n                                                             \
+                        <body>\n                                                          \
+                            <p style=\"font-weight: bold; font-size: 14px; text-align: center;\">\n   \
+                            500 Internal Server Error\n                                   \
+                            </p>\n                                                        \
+                        </body>\n                                                         \
                     </html>%s";
 
     md_res_write(state->conn, res);
@@ -262,7 +262,7 @@ int md_validate_get(conn_state* state) {
     char *f;
     TRACE();
 
-    int n = strlen(req->request_path) + strlen(DOCROOT);
+    int n = strlen(req->request_path) + strlen(options_info.docroot);
 
     if(*(req->request_path + strlen(req->request_path) - 1) == '/') {
         n += strlen(DEFAULT_FILE);
@@ -273,7 +273,7 @@ int md_validate_get(conn_state* state) {
 
     char *s = calloc(n + 1, sizeof(char));
 
-    sprintf(s, "%s%s%s", DOCROOT, req->request_path, f);
+    sprintf(s, "%s%s%s", options_info.docroot, req->request_path, f);
 
     assert(strlen(s) == n);
     md_log(LOGDEBUG, "new request_path: %s", s);
@@ -297,6 +297,7 @@ int md_validate_get(conn_state* state) {
 int md_send_get_response(conn_state* state) {
     response* res = state->res;
     request* req = (request *) state->parser->data;
+    off_t file_len;
 
     TRACE();
     #ifdef DEBUG
@@ -307,7 +308,11 @@ int md_send_get_response(conn_state* state) {
     int v = 0;
     char buffer[READBUFF];
     int file_fd;
+    struct stat filestat;
 
+    assert( stat(req->request_path, &filestat) >=0 );
+
+    snprintf(res->content_length, 16,"%lld", filestat.st_size);
     res->status = OK_S;
     res->content_type = md_detect_type(req->request_path);
     res->charset = CHARSET;
@@ -316,33 +321,14 @@ int md_send_get_response(conn_state* state) {
     md_res_write(state->conn, res);
 
     if( (file_fd = open(req->request_path, O_RDONLY)) < 0 ) {
-       md_fatal("error opening file: %s", req->request_path);
+        char *s = strerror(errno);
+        md_fatal("error opening file: %s", s);
     }
 
-    for(;;) {
-        v = read(file_fd, buffer + index, READBUFF - index);
-        if(v < 0) {
-            md_fatal("read file failure, descriptor: %d", file_fd);
-        } else if (v == 0 && index == 0) {
-            break;
-        }
-        index += v;
-        md_log(LOGDEBUG, "%d bytes read", v);
-        assert(index <= READBUFF && "index is bigger than buffer size");
-        if( index == READBUFF || (index > 0 && v == 0) ) {
-            md_log(LOGDEBUG, "writting %d bytes to socket", v);
-            if( (v = write(state->conn->open_sd, buffer, index)) < 0 ) {
-                if(errno == ECONNRESET) {
-                    TRACE();
-                    close(file_fd);
-                    return CLOSE;
-                } else {
-                    char *s = strerror(errno);
-                    md_fatal("connection write failure, client %s, errno: %s", inet_ntoa(state->conn->conn_info.sin_addr), s);
-                }
-            }
-            index = 0;
-        }
+    file_len = 0;
+    if( sendfile(file_fd, state->conn->open_sd, 0, &file_len, NULL, 0) < 0 ) {
+        char *s = strerror(errno);
+        md_fatal("error writing file: %s", s);
     }
 
     TRACE();
@@ -360,12 +346,12 @@ int md_send_404_response(conn_state* state) {
     res->content_type = MIME_HTML;
     res->charset = CHARSET;
     res->expires = EXPIRES_NEVER;
-    res->content = "<html>                                                              \
-                        <body>                                                          \
-                            <p style=\"font-weight: bold; font-size: 14px; text-align: center;\">           \
-                            404 File Not Found                                          \
-                            </p>                                                        \
-                        </body>                                                         \
+    res->content = "<html>\n                                                            \
+                        <body>\n                                                        \
+                            <p style=\"font-weight: bold; font-size: 18px; text-align: center;\">\n         \
+                            404 File Not Found\n                                        \
+                            </p>\n                                                      \
+                        </body>\n                                                       \
                     </html>%s";
 
     md_res_write(state->conn, res);
