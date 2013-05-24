@@ -7,7 +7,10 @@ All rights reserved
 
 */
 
-#include "midnight.h"
+#include <mdt_core.h>
+#include <mdt_hash.h>
+#include <http11_parser.h>
+#include <mdt_worker.h>
 
 int listen_sd;
 thread_info *threads;
@@ -123,7 +126,7 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 		md_fatal("accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));
 	} else {
 		#ifdef DEBUG
-		md_log(LOGDEBUG, "accepted client %s", inet_ntoa(conn->conn_info.sin_addr));
+		mdt_log(LOGDEBUG, "accepted client %s", inet_ntoa(conn->conn_info.sin_addr));
 		#endif
 	}
 
@@ -135,7 +138,7 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 
 	TRACE();
 	#ifdef DEBUG
-	md_log(LOGDEBUG, "enqueued client %s", inet_ntoa(conn->conn_info.sin_addr));
+	mdt_log(LOGDEBUG, "enqueued client %s", inet_ntoa(conn->conn_info.sin_addr));
 	#endif
 }
 
@@ -156,14 +159,14 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) 
 	if( sem_close(queue_info.sem_q_full) != 0 ||
 		sem_close(queue_info.sem_q_empty) != 0 ) {
 		char *s = strerror(errno);
-		md_log(LOGDEBUG, "queue semaphore close fail: %s", s);
+		mdt_log(LOGDEBUG, "queue semaphore close fail: %s", s);
 	}
 
 	for(int i = 0; i < options_info.n_threads; i++) {
 		pthread_join(threads[i].thread_id, NULL);
 	}
 	#ifdef DEBUG
-	md_log(LOGDEBUG, "process quitting!");
+	mdt_log(LOGDEBUG, "process quitting!");
 	#endif
 	exit(0);
 }

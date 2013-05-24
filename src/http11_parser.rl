@@ -3,7 +3,10 @@
  * You can redistribute it and/or modify it under the same terms as Ruby.
  */
 
-#include "midnight.h"
+#include <mdt_core.h>
+#include <http11_parser.h>
+#include <mdt_hash.h>
+#include <mdt_worker.h>
 
 #define LEN(AT, FPC) (FPC - buffer - parser->AT)
 #define MARK(M,FPC) (parser->M = (FPC) - buffer)

@@ -7,11 +7,14 @@ All rights reserved
 
 */
 
-#include "midnight.h"
-#include "events.h"
+#include <mdt_core.h>
+#include <http11_parser.h>
+#include <mdt_hash.h>
+#include <mdt_worker.h>
+#include <mdt_conn_state.h>
 
 #ifdef DEBUG
-#define CALL(A) md_log(LOGDEBUG, "event trigger: %d", event); next = state_actions.A(state)
+#define CALL(A) mdt_log(LOGDEBUG, "event trigger: %d", event); next = state_actions.A(state)
 #else
 #define CALL(A) next = state_actions.A(state)
 #endif
@@ -19,7 +22,7 @@ All rights reserved
 %%{
     machine StateActions;
 
-    import "events.h";
+    import "mdt_conn_state.h";
 
     alphtype int;
 
@@ -76,7 +79,7 @@ void md_worker(thread_info *opts) {
 
     while(!opts->thread_continue) {
         #ifdef DEBUG
-        md_log(LOGDEBUG, "awaiting new connection");
+        mdt_log(LOGDEBUG, "awaiting new connection");
         #endif
 
         TRACE();
@@ -94,7 +97,7 @@ void md_worker(thread_info *opts) {
         }
 
         #ifdef DEBUG
-        md_log(LOGDEBUG, "dequeued client %s", inet_ntoa(state->conn->conn_info.sin_addr));
+        mdt_log(LOGDEBUG, "dequeued client %s", inet_ntoa(state->conn->conn_info.sin_addr));
         #endif
 
         next = OPEN;
@@ -109,12 +112,12 @@ void md_worker(thread_info *opts) {
         }
 
         #ifdef DEBUG
-        md_log(LOGDEBUG, "finished handling connection");
+        mdt_log(LOGDEBUG, "finished handling connection");
         #endif
     }
 
     #ifdef DEBUG
-    md_log(LOGDEBUG, "thread quitting!");
+    mdt_log(LOGDEBUG, "thread quitting!");
     #endif
     next = 0;
     pthread_exit(&next);
@@ -202,15 +205,15 @@ int md_read_request_method(conn_state* state) {
 
 /*
     #ifdef DEBUG
-    md_log(LOGDEBUG, "Request method: %s", req->request_method);
-    md_log(LOGDEBUG, "Request URI: %s", req->request_uri);
-    md_log(LOGDEBUG, "Fragment: %s", req->fragment);
-    md_log(LOGDEBUG, "Request path: %s", req->request_path);
-    md_log(LOGDEBUG, "Query string: %s", req->query_string);
-    md_log(LOGDEBUG, "HTTP version: %s", req->http_version);
+    mdt_log(LOGDEBUG, "Request method: %s", req->request_method);
+    mdt_log(LOGDEBUG, "Request URI: %s", req->request_uri);
+    mdt_log(LOGDEBUG, "Fragment: %s", req->fragment);
+    mdt_log(LOGDEBUG, "Request path: %s", req->request_path);
+    mdt_log(LOGDEBUG, "Query string: %s", req->query_string);
+    mdt_log(LOGDEBUG, "HTTP version: %s", req->http_version);
     http_header *s, *tmp;
     HASH_ITER(hh, req->table, s, tmp) {
-        md_log(LOGDEBUG, "%s: %s", s->key, s->value);
+        mdt_log(LOGDEBUG, "%s: %s", s->key, s->value);
     }
     #endif
 */
@@ -239,7 +242,7 @@ int md_send_request_invalid(conn_state* state) {
     res = state->res;
 
     TRACE();
-    md_log(LOGINFO, "500 Internal Server Error");
+    mdt_log(LOGINFO, "500 Internal Server Error");
 
     res->status = SRVERR_S;
     res->content_type = MIME_HTML;
@@ -276,11 +279,11 @@ int md_validate_get(conn_state* state) {
     sprintf(s, "%s%s%s", options_info.docroot, req->request_path, f);
 
     assert(strlen(s) == n);
-    md_log(LOGDEBUG, "new request_path: %s", s);
+    mdt_log(LOGDEBUG, "new request_path: %s", s);
 
     free(req->request_path);
     req->request_path = s;
-    md_log(LOGDEBUG, "requested file: %s", req->request_path);
+    mdt_log(LOGDEBUG, "requested file: %s", req->request_path);
 
     if(req->request_path == NULL || req->request_uri == NULL) {
         return GET_NOT_VALID;
@@ -301,12 +304,11 @@ int md_send_get_response(conn_state* state) {
 
     TRACE();
     #ifdef DEBUG
-    md_log(LOGDEBUG, "200 OK");
+    mdt_log(LOGDEBUG, "200 OK");
     #endif
 
     int index = 0;
     int v = 0;
-    char buffer[READBUFF];
     int file_fd;
     struct stat filestat;
 
@@ -340,7 +342,7 @@ int md_send_get_response(conn_state* state) {
 int md_send_404_response(conn_state* state) {
     response* res = state->res;
     TRACE();
-    md_log(LOGDEBUG, "404 Not Found");
+    mdt_log(LOGDEBUG, "404 Not Found");
 
     res->status = NF_S;
     res->content_type = MIME_HTML;
@@ -395,6 +397,6 @@ char* md_detect_type(char* filename) {
     } else {
         c = MIME_TXT;
     }
-    md_log(LOGDEBUG, "detected MIME type: %s", c);
+    mdt_log(LOGDEBUG, "detected MIME type: %s", c);
     return c;
 }
