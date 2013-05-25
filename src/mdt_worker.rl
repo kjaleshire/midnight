@@ -71,7 +71,7 @@ All rights reserved
 
 %% write data;
 
-void md_worker(thread_info *opts) {
+void mdt_worker(thread_info *opts) {
     int next;
     conn_state *state;
 
@@ -102,13 +102,13 @@ void md_worker(thread_info *opts) {
 
         next = OPEN;
 
-        md_state_init(state);
+        mdt_state_init(state);
 
         for(;;) {
             if(next == DONE) {
                 break;
             }
-            next = md_state_event(state, next);
+            next = mdt_state_event(state, next);
         }
 
         #ifdef DEBUG
@@ -123,7 +123,7 @@ void md_worker(thread_info *opts) {
     pthread_exit(&next);
 }
 
-int md_state_event(conn_state* state, int event) {
+int mdt_state_event(conn_state* state, int event) {
     TRACE();
     assert(event >= 10 && event <= 20 && "event out of range");
 
@@ -140,7 +140,7 @@ int md_state_event(conn_state* state, int event) {
     return next;
 }
 
-int md_state_init(conn_state* state) {
+int mdt_state_init(conn_state* state) {
     TRACE();
 
     %% write init;
@@ -148,23 +148,23 @@ int md_state_init(conn_state* state) {
     return 1;
 }
 
-int md_parse_init(conn_state* state) {
+int mdt_parse_init(conn_state* state) {
     TRACE();
 
     state->parser = malloc(sizeof(http_parser));
     http_parser_init(state->parser);
 
     state->parser->data = malloc(sizeof(request));
-    md_req_init((request *) state->parser->data);
+    mdt_req_init((request *) state->parser->data);
 
     return PARSE;
 }
 
-int md_parse_exec(conn_state* state) {
+int mdt_parse_exec(conn_state* state) {
     request* req = (request *) state->parser->data;
 
     TRACE();
-    md_req_read(state->conn, req);
+    mdt_req_read(state->conn, req);
     if(req->buffer_index == 0) {
         return CLOSE;
     }
@@ -182,7 +182,7 @@ int md_parse_exec(conn_state* state) {
     }
 }
 
-int md_read_request_method(conn_state* state) {
+int mdt_read_request_method(conn_state* state) {
     request* req = (request *) state->parser->data;
     response* res;
 
@@ -192,7 +192,7 @@ int md_read_request_method(conn_state* state) {
 
     res = state->res;
 
-    md_res_init(res);
+    mdt_res_init(res);
 
     time_t ticks = time(NULL);
 
@@ -225,7 +225,7 @@ int md_read_request_method(conn_state* state) {
     }
 }
 
-int md_send_request_invalid(conn_state* state) {
+int mdt_send_request_invalid(conn_state* state) {
     request* req = (request*) state->parser->data;
     response* res;
     time_t ticks;
@@ -255,12 +255,12 @@ int md_send_request_invalid(conn_state* state) {
                         </body>\n                                                         \
                     </html>%s";
 
-    md_res_write(state->conn, res);
+    mdt_res_write(state->conn, res);
 
     return CLOSE;
 }
 
-int md_validate_get(conn_state* state) {
+int mdt_validate_get(conn_state* state) {
     request* req = (request *) state->parser->data;
     char *f;
     TRACE();
@@ -297,7 +297,7 @@ int md_validate_get(conn_state* state) {
     return GET_VALID;
 }
 
-int md_send_get_response(conn_state* state) {
+int mdt_send_get_response(conn_state* state) {
     response* res = state->res;
     request* req = (request *) state->parser->data;
     off_t file_len;
@@ -316,21 +316,21 @@ int md_send_get_response(conn_state* state) {
 
     snprintf(res->content_length, 16,"%lld", filestat.st_size);
     res->status = OK_S;
-    res->content_type = md_detect_type(req->request_path);
+    res->content_type = mdt_detect_type(req->request_path);
     res->charset = CHARSET;
     res->expires = EXPIRES_NEVER;
 
-    md_res_write(state->conn, res);
+    mdt_res_write(state->conn, res);
 
     if( (file_fd = open(req->request_path, O_RDONLY)) < 0 ) {
         char *s = strerror(errno);
-        md_fatal("error opening file: %s", s);
+        mdt_fatal("error opening file: %s", s);
     }
 
     file_len = 0;
     if( sendfile(file_fd, state->conn->open_sd, 0, &file_len, NULL, 0) < 0 ) {
         char *s = strerror(errno);
-        md_fatal("error writing file: %s", s);
+        mdt_fatal("error writing file: %s", s);
     }
 
     TRACE();
@@ -339,7 +339,7 @@ int md_send_get_response(conn_state* state) {
     return CLOSE;
 }
 
-int md_send_404_response(conn_state* state) {
+int mdt_send_404_response(conn_state* state) {
     response* res = state->res;
     TRACE();
     mdt_log(LOGDEBUG, "404 Not Found");
@@ -356,12 +356,12 @@ int md_send_404_response(conn_state* state) {
                         </body>\n                                                       \
                     </html>%s";
 
-    md_res_write(state->conn, res);
+    mdt_res_write(state->conn, res);
 
     return CLOSE;
 }
 
-int md_cleanup(conn_state* state) {
+int mdt_cleanup(conn_state* state) {
     close(state->conn->open_sd);
     TRACE();
 
@@ -371,14 +371,14 @@ int md_cleanup(conn_state* state) {
     state->old_conn = state->conn;
 
     free(state->res); state->res = NULL;
-    md_req_destroy((request *) state->parser->data);
+    mdt_req_destroy((request *) state->parser->data);
     free(state->parser->data);
     free(state->parser);
 
     return DONE;
 }
 
-char* md_detect_type(char* filename) {
+char* mdt_detect_type(char* filename) {
     char *c;
     if( (c = strrchr(filename, '.')) == NULL || strcmp(c, ".txt") == 0 ) {
         c = MIME_TXT;

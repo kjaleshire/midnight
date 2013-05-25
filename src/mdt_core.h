@@ -32,7 +32,6 @@ All rights reserved
 #include <getopt.h>
 #include <ev.h>					// libev event handler
 #include <sys/queue.h>			// queue macros
-#include <uthash.h>				// hash table macros
 
 /* APP CONSTANTS */
 #define APP_NAME		"midnight"
@@ -43,8 +42,6 @@ All rights reserved
 #define PRERELEASE_V	""
 
 /* CONSTANT DEFINITIONS */
-#define RESPSIZE		8 * 1024
-#define REQSIZE			8 * 1024
 #define LISTENQ			1024
 #define MAXQUEUESIZE	4
 #define TIMEFMT			"%H:%M:%S %m.%d.%y"
@@ -67,41 +64,6 @@ enum {
 #define DEFAULT_PORT		8080
 #define DEFAULT_FILE		"index.html"
 #define DEFAULT_DOCROOT		"docroot"
-
-/* headers */
-#define DATE_H			"Date:"
-#define CONTENT_H		"Content-Type:"
-#define EXPIRES_H		"Expires:"
-#define SERVER_H		"Server:"
-#define HOST_H			"Host:"
-#define CONN_H			"Connection:"
-#define CONTENT_LENGTH_H	"Content-Length:"
-
-/* header stock values	*/
-#define CONN_CLOSE		"close"
-#define CONN_KEEPALIVE	"keep-alive"
-#define SERVER_NAME		APP_NAME
-#define EXPIRES_NEVER	"-1"
-
-/* MIME types... */
-#define MIME_HTML		"text/html;"
-#define MIME_JPG		"image/jpeg;"
-#define MIME_GIF		"image/gif;"
-#define MIME_PNG		"image/png;"
-#define MIME_CSS		"text/css;"
-#define MIME_JS			"application/javascript;"
-#define MIME_TXT		"text/plain;"
-
-/* default character set */
-#define CHARSET			"charset=utf-8"
-
-/* HTTP line terminator */
-#define CRLF "\r\n"
-
-/* header formats */
-#define HEADER_FMT		"%s %s%s"
-#define CONTENT_FMT		"%s %s %s%s"
-#define DATE_FMT		"%s %.24s%s"
 
 typedef struct conn_data {
     int open_sd;
@@ -147,13 +109,11 @@ static struct option optstruct[] = {
 	{ "version", no_argument, NULL, 'v'}
 };
 
-void md_worker(thread_info* opts);
+void mdt_worker(thread_info* opts);
 
-void sig_usr1_handler(int signum);
-
-void md_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
-void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
-void md_usage();
+void mdt_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
+void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
+void mdt_usage();
 
 /* MACRO DEFINITIONS */
 #ifdef DEBUG
@@ -188,7 +148,7 @@ void md_usage();
 #endif
 
 /* spoilers: everyone dies */
-#define md_fatal(m, ...)	\
+#define mdt_fatal(m, ...)	\
 		do {	\
 		    if(LOGFATAL <= log_info.log_level) {	\
 		    	log_info.ticks = time(NULL);	\
@@ -215,7 +175,7 @@ void md_usage();
         	}	\
 		} while(0)
 
-#define md_options_init()	\
+#define mdt_options_init()	\
 		do {	\
 			options_info.n_threads = 2;	\
 			options_info.address = htonl(INADDR_ANY);	\
@@ -224,6 +184,6 @@ void md_usage();
 			log_info.log_level = LOGINFO;	\
 		} while(0)
 		
-#define md_version() printf("  %s version %d.%d.%d%s\n", APP_NAME, MAJOR_V, MINOR_V, PATCH_V, PRERELEASE_V)
+#define mdt_version() printf("  %s version %d.%d.%d%s\n", APP_NAME, MAJOR_V, MINOR_V, PATCH_V, PRERELEASE_V)
 
 #endif /* mdt_core_h */

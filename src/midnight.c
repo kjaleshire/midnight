@@ -23,7 +23,7 @@ int main(int argc, char *argv[]){
 	ev_io* watcher_accept = malloc(sizeof(ev_io));
 	ev_signal* watcher_sigint = malloc(sizeof(ev_signal));
 
-	md_options_init();
+	mdt_options_init();
 
 	#ifdef DEBUG
 	log_info.log_level = LOGDEBUG;
@@ -50,17 +50,17 @@ int main(int argc, char *argv[]){
 				options_info.n_threads = strtol(optarg, NULL, 0);
 				break;
 			case 'v':
-				md_version();
+				mdt_version();
 				exit(0);
 			case 'h':
 			default:
-				md_version();
-				md_usage();
+				mdt_version();
+				mdt_usage();
 				exit(0);
 		}
 	}
 
-	md_set_state_actions(&state_actions);
+	mdt_set_state_actions(&state_actions);
 
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = options_info.address;
@@ -74,7 +74,7 @@ int main(int argc, char *argv[]){
 		bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
 		listen(listen_sd, LISTENQ) < 0
 	) {
-		md_fatal("socket create & bind fail on %s",
+		mdt_fatal("socket create & bind fail on %s",
 			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : inet_ntoa(servaddr.sin_addr));
 	}
 	else {
@@ -87,11 +87,11 @@ int main(int argc, char *argv[]){
 		(sem_unlink("full") != 0 && errno != ENOENT) )
 		 {
 		 	char *s = strerror(errno);
-			md_fatal("queue semaphore create fail: %s", s);
+			mdt_fatal("queue semaphore create fail: %s", s);
 	}
 
 	if( pthread_mutex_init(&queue_info.mtx_conn_queue, NULL) != 0 ) {
-		md_fatal("queue mutex create fail");
+		mdt_fatal("queue mutex create fail");
 	}
 
 	STAILQ_INIT(&(queue_info.conn_queue));
@@ -99,17 +99,17 @@ int main(int argc, char *argv[]){
 	threads = calloc(options_info.n_threads, sizeof(thread_info));
 	for(v = 0; v < options_info.n_threads; v++) {
 		threads[v].thread_continue = 0;
-		if(	pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) md_worker, &threads[v]) < 0) {
-			md_fatal("thread pool spawn fail");
+		if(	pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) mdt_worker, &threads[v]) < 0) {
+			mdt_fatal("thread pool spawn fail");
 		}
 	}
 
 	default_loop = EV_DEFAULT;
 
-	ev_signal_init(watcher_sigint, md_sigint_cb, SIGINT);
+	ev_signal_init(watcher_sigint, mdt_sigint_cb, SIGINT);
 	ev_signal_start(default_loop, watcher_sigint);
 
-	ev_io_init(watcher_accept, md_accept_cb, listen_sd, EV_READ);
+	ev_io_init(watcher_accept, mdt_accept_cb, listen_sd, EV_READ);
 	ev_io_start(default_loop, watcher_accept);
 
 	TRACE();
@@ -117,13 +117,13 @@ int main(int argc, char *argv[]){
 	ev_run(default_loop, 0);
 }
 
-void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
+void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 	TRACE();
 	socklen_t sock_size = sizeof(struct sockaddr_in);
 	conn_data *conn = malloc(sizeof(conn_data));
 
 	if( (conn->open_sd = accept(listen_sd, (struct sockaddr *) &(conn->conn_info), &sock_size)) < 0) {
-		md_fatal("accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));
+		mdt_fatal("accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));
 	} else {
 		#ifdef DEBUG
 		mdt_log(LOGDEBUG, "accepted client %s", inet_ntoa(conn->conn_info.sin_addr));
@@ -142,7 +142,7 @@ void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 	#endif
 }
 
-void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
+void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
 	TRACE();
 	close(listen_sd);
 	conn_data no_conn[options_info.n_threads];
@@ -171,7 +171,7 @@ void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) 
 	exit(0);
 }
 
-void md_usage() {
+void mdt_usage() {
 	printf("\n");
 	printf("  Usage:\n");
 	printf("\tmidnight [-hevq] [-t threadnum] [-a listenaddress] [-p listenport] [-d docroot]\n");

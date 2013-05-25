@@ -1,3 +1,4 @@
+#include <uthash.h>
 
 /* hash structure */
 typedef struct http_header {
