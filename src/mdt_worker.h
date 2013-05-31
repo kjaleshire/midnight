@@ -141,6 +141,9 @@ int mdt_cleanup(conn_state* state);
 char* mdt_detect_type(char* filename);
 int mdt_res_write(conn_data* conn, response* res);
 void mdt_res_init(response* res);
+void mdt_req_init(request* req);
+void mdt_req_destroy(request* req);
+void mdt_set_state_actions();
 
 #define mdt_res_buff(r, m, ...)	\
 		do {	\
@@ -156,48 +159,6 @@ void mdt_res_init(response* res);
             }	\
             assert((r)->buffer_index < REQSIZE - 1);	\
             (r)->buffer[(r)->buffer_index] = '\0';	\
-		} while(0)
-
-#define mdt_req_init(r)	\
-		do {	\
-			(r)->buffer_index = 0;	\
-			(r)->table = NULL;	\
-			(r)->request_method = NULL;	\
-			(r)->request_uri = NULL;	\
-			(r)->fragment = NULL;	\
-			(r)->request_path = NULL;	\
-			(r)->query_string = NULL;	\
-			(r)->http_version = NULL;	\
-		} while(0)
-
-#define mdt_req_destroy(r)	\
-		do {	\
-			http_header *s, *tmp;	\
-			HASH_ITER(hh, (r)->table, s, tmp) {	\
-				HASH_DEL((r)->table, s);	\
-				free(s->key);	\
-				free(s->value);	\
-				free(s);	\
-			}	\
-			(r)->buffer[0] = '\0';	\
-			if((r)->request_method != NULL) free((r)->request_method);	\
-	        if((r)->request_uri != NULL) free((r)->request_uri);	\
-	        if((r)->fragment != NULL) free((r)->fragment);	\
-	        if((r)->request_path != NULL) free((r)->request_path);	\
-	        if((r)->query_string != NULL) free((r)->query_string);	\
-	        if((r)->http_version != NULL) free((r)->http_version);	\
-		} while (0)
-
-#define mdt_set_state_actions(a)	\
-		do {	\
-			(a)->parse_init = mdt_parse_init;	\
-			(a)->parse_exec = mdt_parse_exec;	\
-			(a)->read_request_method = mdt_read_request_method;	\
-			(a)->validate_get = mdt_validate_get;	\
-			(a)->send_get_response = mdt_send_get_response;	\
-			(a)->send_request_invalid = mdt_send_request_invalid;	\
-			(a)->send_404_response = mdt_send_404_response;	\
-			(a)->cleanup = mdt_cleanup;	\
 		} while(0)
 
 #define mdt_dict_add(k, n)	\
