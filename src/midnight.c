@@ -57,7 +57,7 @@ int main(int argc, char *argv[]){
 		}
 	}
 
-	mdt_set_state_actions(&state_actions);
+	mdt_set_state_actions();
 
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = options_info.address;
