@@ -11,6 +11,7 @@ All rights reserved
 #include <mdt_hash.h>
 #include <http11_parser.h>
 #include <mdt_worker.h>
+#include <midnight.h>
 
 int listen_sd;
 thread_info *threads;
@@ -74,7 +75,7 @@ int main(int argc, char *argv[]){
 		bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
 		listen(listen_sd, LISTENQ) < 0
 	) {
-		mdt_fatal("socket create & bind fail on %s",
+		mdt_fatal(ERRSYS, "socket create & bind fail on %s",
 			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : inet_ntoa(servaddr.sin_addr));
 	}
 	else {
@@ -87,11 +88,11 @@ int main(int argc, char *argv[]){
 		(sem_unlink("full") != 0 && errno != ENOENT) )
 		 {
 		 	char *s = strerror(errno);
-			mdt_fatal("queue semaphore create fail: %s", s);
+			mdt_fatal(ERRSYS, "queue semaphore create fail: %s", s);
 	}
 
 	if( pthread_mutex_init(&queue_info.mtx_conn_queue, NULL) != 0 ) {
-		mdt_fatal("queue mutex create fail");
+		mdt_fatal(ERRSYS, "queue mutex create fail");
 	}
 
 	STAILQ_INIT(&(queue_info.conn_queue));
@@ -100,7 +101,7 @@ int main(int argc, char *argv[]){
 	for(v = 0; v < options_info.n_threads; v++) {
 		threads[v].thread_continue = 0;
 		if(	pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) mdt_worker, &threads[v]) < 0) {
-			mdt_fatal("thread pool spawn fail");
+			mdt_fatal(ERRSYS, "thread pool spawn fail");
 		}
 	}
 
@@ -123,7 +124,7 @@ void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 	conn_data *conn = malloc(sizeof(conn_data));
 
 	if( (conn->open_sd = accept(listen_sd, (struct sockaddr *) &(conn->conn_info), &sock_size)) < 0) {
-		mdt_fatal("accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));
+		mdt_fatal(ERRSYS, "accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));
 	} else {
 		#ifdef DEBUG
 		mdt_log(LOGDEBUG, "accepted client %s", inet_ntoa(conn->conn_info.sin_addr));
@@ -169,6 +170,24 @@ void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents)
 	mdt_log(LOGDEBUG, "process quitting!");
 	#endif
 	exit(0);
+}
+
+void mdt_log_init() {
+	pthread_mutexattr_t mtx_attr;
+	if( pthread_mutexattr_init(&mtx_attr) != 0 ||
+	pthread_mutexattr_settype(&mtx_attr, PTHREAD_MUTEX_RECURSIVE) != 0 ||
+	pthread_mutex_init(&log_info.mtx_term, &mtx_attr) != 0 ) {
+	    printf("System error: unable to initialize terminal mutex");
+	    exit(ERRSYS);
+	}
+}
+
+void mdt_options_init() {
+	options_info.n_threads = 2;
+	options_info.address = htonl(INADDR_ANY);
+	options_info.port = htons(DEFAULT_PORT);
+	options_info.docroot = DEFAULT_DOCROOT;
+	log_info.log_level = LOGINFO;
 }
 
 void mdt_usage() {

@@ -1,6 +1,6 @@
 /*
 
-Midnight worker thread logic
+midnight worker thread logic
 
 (c) 2013 Kyle J Aleshire
 All rights reserved
@@ -320,17 +320,19 @@ int mdt_send_get_response(conn_state* state) {
     res->charset = CHARSET;
     res->expires = EXPIRES_NEVER;
 
-    mdt_res_write(state->conn, res);
+    if(mdt_res_write(state->conn, res) < 0 ) {
+        return CLOSE;
+    }
 
     if( (file_fd = open(req->request_path, O_RDONLY)) < 0 ) {
         char *s = strerror(errno);
-        mdt_fatal("error opening file: %s", s);
+        mdt_fatal(ERRSYS, "error opening file: %s", s);
     }
 
     file_len = 0;
     if( sendfile(file_fd, state->conn->open_sd, 0, &file_len, NULL, 0) < 0 ) {
         char *s = strerror(errno);
-        mdt_fatal("error writing file: %s", s);
+        mdt_fatal(ERRSYS, "error writing file: %s", s);
     }
 
     TRACE();
@@ -376,6 +378,31 @@ int mdt_cleanup(conn_state* state) {
     free(state->parser);
 
     return DONE;
+}
+
+int mdt_res_write(conn_data* conn, response* res) {
+    assert((res)->http_version != NULL && res->status != NULL && "HTTP version & status not set");
+        mdt_res_buff(res, HEADER_FMT, res->http_version, res->status, CRLF);
+    if(res->content_type != NULL && res->charset != NULL) {
+        mdt_res_buff(res, CONTENT_FMT, CONTENT_H, res->content_type, res->charset, CRLF); }
+    if(res->current_time != NULL) {
+        mdt_res_buff(res, DATE_FMT, DATE_H, res->current_time, CRLF); }
+    if(res->content_length != NULL) {
+        mdt_res_buff(res, HEADER_FMT, CONTENT_LENGTH_H, res->content_length, CRLF); }
+    if(res->expires != NULL) {
+        mdt_res_buff(res, HEADER_FMT, EXPIRES_H, res->expires, CRLF); }
+    if(res->expires != NULL) {
+        mdt_res_buff(res, HEADER_FMT, SERVER_H, res->servername, CRLF); }
+    if(res->connection != NULL) {
+        mdt_res_buff(res, HEADER_FMT, CONN_H, res->connection, CRLF); }
+    mdt_res_buff(res, "%s", CRLF);
+    if(res->content != NULL) {
+        mdt_res_buff(res, res->content, CRLF); }
+    if(write(conn->open_sd, res->buffer, res->buffer_index) < 0) {
+        mdt_log(LOGINFO, "socket write failed");
+        return -1;
+    }
+    return 0;
 }
 
 char* mdt_detect_type(char* filename) {

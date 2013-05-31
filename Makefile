@@ -25,3 +25,5 @@ $(RAGELTARGET): $(RAGELSOURCE)
 
 clean:
 	rm -rf $(APPNAME) $(APPNAME).dSYM a.out a.out.dSYM $(patsubst src%, .%, $(SOURCE:.c=.plist)) $(RAGELTARGET:.c=.plist) $(RAGELTARGET) *.o
+
+.PHONY: all clean analyze debug

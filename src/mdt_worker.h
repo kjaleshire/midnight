@@ -1,6 +1,6 @@
 /*
 
-Worker thread header file
+midnight thread header file
 
 (c) 2013 Kyle J Aleshire
 All rights reserved
@@ -10,8 +10,11 @@ All rights reserved
 #ifndef mdt_worker_h
 #define mdt_worker_h
 
-/* buffer sizes */
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <string.h>
 
+/* buffer sizes */
 static const int RESPSIZE =		8 * 1024;
 static const int REQSIZE =		8 * 1024;
 
@@ -28,7 +31,7 @@ static char* OK_S =			"200 OK";
 static char* NF_S =			"404 Not Found";
 static char* SRVERR_S =		"500 Internal Server Error";
 
-/* headers */
+/* HTTP headers */
 static char* DATE_H =			"Date:";
 static char* CONTENT_H =		"Content-Type:";
 static char* EXPIRES_H =		"Expires:";
@@ -37,7 +40,7 @@ static char* HOST_H =			"Host:";
 static char* CONN_H =			"Connection:";
 static char* CONTENT_LENGTH_H =	"Content-Length:";
 
-/* header stock values	*/
+/* HTTP header stock values	*/
 static char* CONN_CLOSE	=		"close";
 static char* CONN_KEEPALIVE =	"keep-alive";
 static char* SERVER_NAME =		APP_NAME;
@@ -120,6 +123,8 @@ struct {
 	conn_state_cb cleanup;
 } state_actions;
 
+void mdt_worker(thread_info* opts);
+
 int mdt_state_init(conn_state* state);
 int mdt_state_event(conn_state* state, int event);
 
@@ -131,7 +136,9 @@ int mdt_send_get_response(conn_state* state);
 int mdt_send_request_invalid(conn_state* state);
 int mdt_send_404_response(conn_state* state);
 int mdt_cleanup(conn_state* state);
+
 char* mdt_detect_type(char* filename);
+int mdt_res_write(conn_data* conn, response* res);
 
 #define mdt_res_buff(r, m, ...)	\
 		do {	\
@@ -140,34 +147,10 @@ char* mdt_detect_type(char* filename);
 			assert((r)->buffer_index < RESPSIZE);	\
 		} while(0)
 
-#define mdt_res_write(c, r)	\
-		do {	\
-    		assert((r)->http_version != NULL && (r)->status != NULL && "HTTP version & status not set");	\
-    			mdt_res_buff((r), HEADER_FMT, (r)->http_version, (r)->status, CRLF);		\
-    		if((r)->content_type != NULL && (r)->charset != NULL) {		\
-    			mdt_res_buff((r), CONTENT_FMT, CONTENT_H, (r)->content_type, (r)->charset, CRLF); }	\
-    		if((r)->current_time != NULL) {		\
-    			mdt_res_buff((r), DATE_FMT, DATE_H, (r)->current_time, CRLF); }	\
-    		if((r)->content_length != NULL) {	\
-    			mdt_res_buff((r), HEADER_FMT, CONTENT_LENGTH_H, (r)->content_length, CRLF); }	\
-    		if((r)->expires != NULL) {	\
-    			mdt_res_buff((r), HEADER_FMT, EXPIRES_H, (r)->expires, CRLF); }	\
-    		if((r)->expires != NULL) {	\
-    			mdt_res_buff((r), HEADER_FMT, SERVER_H, (r)->servername, CRLF); }	\
-    		if((r)->connection != NULL) {	\
-    			mdt_res_buff((r), HEADER_FMT, CONN_H, (r)->connection, CRLF); }	\
-    		mdt_res_buff((r), "%s", CRLF);	\
-    		if((r)->content != NULL) {	\
-    			mdt_res_buff((r), (r)->content, CRLF); }		\
-			if(write((c)->open_sd, (r)->buffer, (r)->buffer_index) < 0) {	\
-				mdt_log(LOGINFO, "socket write failed");	\
-			}	\
-		} while(0)
-
 #define mdt_req_read(c, r)	\
 		do {	\
 			if ( ((r)->buffer_index += read((c)->open_sd, (r)->buffer + (r)->buffer_index, REQSIZE - (r)->buffer_index)) < 0) {	\
-				mdt_fatal("read request fail from %s, sd: %d", inet_ntoa((c)->conn_info.sin_addr), (c)->open_sd);	\
+				mdt_fatal(ERRSYS, "read request fail from %s, sd: %d", inet_ntoa((c)->conn_info.sin_addr), (c)->open_sd);	\
             }	\
             assert((r)->buffer_index < REQSIZE - 1);	\
             (r)->buffer[(r)->buffer_index] = '\0';	\
