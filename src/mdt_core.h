@@ -89,7 +89,7 @@ struct {
 	uint32_t address;
 } options_info;
 
-/* MACRO DEFINITIONS */
+/* log+fatal macro defs */
 #ifdef DEBUG
 #define LOG_FD stdout
 #define mdt_log(e, m, ...)	\
