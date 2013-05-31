@@ -7,6 +7,9 @@ All rights reserved
 
 */
 
+#ifndef midnight_h
+#define midnight_h
+
 #include <getopt.h>
 #include <sys/socket.h>
 
@@ -23,3 +26,5 @@ static struct option optstruct[] = {
 
 void mdt_options_init();
 void mdt_log_init();
+
+#endif /* midnight_h */

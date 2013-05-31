@@ -26,10 +26,6 @@ int main(int argc, char *argv[]){
 
 	mdt_options_init();
 
-	#ifdef DEBUG
-	log_info.log_level = LOGDEBUG;
-	#endif
-
 	while( (v = getopt_long(argc, argv, "eqp:a:d:t:vh", optstruct, NULL)) != -1 ) {
 		switch(v) {
 			case 'e':
@@ -187,7 +183,13 @@ void mdt_options_init() {
 	options_info.address = htonl(INADDR_ANY);
 	options_info.port = htons(DEFAULT_PORT);
 	options_info.docroot = DEFAULT_DOCROOT;
+
+	#ifdef DEBUG
+	log_info.log_level = LOGDEBUG;
+	#else
 	log_info.log_level = LOGINFO;
+	#endif
+
 }
 
 void mdt_usage() {

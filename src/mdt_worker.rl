@@ -217,6 +217,7 @@ int mdt_read_request_method(conn_state* state) {
     }
     #endif
 */
+
     state->res = res;
     if(strcmp(req->request_method, GET) == 0) {
         return GET_REQUEST;
@@ -226,7 +227,6 @@ int mdt_read_request_method(conn_state* state) {
 }
 
 int mdt_send_request_invalid(conn_state* state) {
-    request* req = (request*) state->parser->data;
     response* res;
     time_t ticks;
 
@@ -253,7 +253,7 @@ int mdt_send_request_invalid(conn_state* state) {
                             500 Internal Server Error\n                                   \
                             </p>\n                                                        \
                         </body>\n                                                         \
-                    </html>%s";
+                    </html>";
 
     mdt_res_write(state->conn, res);
 
@@ -287,9 +287,9 @@ int mdt_validate_get(conn_state* state) {
 
     if(req->request_path == NULL || req->request_uri == NULL) {
         return GET_NOT_VALID;
-    } else if (stat(req->request_path, NULL) < 0 && errno == ENOENT) {
+    } else if (stat(req->request_path, &(state->res->filestat)) < 0 && errno == ENOENT) {
         *(req->request_path + strlen(req->request_path) - 2) = '\0';
-        if (stat(req->request_path, NULL) < 0 && errno == ENOENT) {
+        if (stat(req->request_path, &(state->res->filestat)) < 0 && errno == ENOENT) {
             return GET_NOT_FOUND;
         }
     }
@@ -300,21 +300,16 @@ int mdt_validate_get(conn_state* state) {
 int mdt_send_get_response(conn_state* state) {
     response* res = state->res;
     request* req = (request *) state->parser->data;
-    off_t file_len;
 
     TRACE();
     #ifdef DEBUG
     mdt_log(LOGDEBUG, "200 OK");
     #endif
 
-    int index = 0;
-    int v = 0;
+    off_t file_len = 0;
     int file_fd;
-    struct stat filestat;
 
-    assert( stat(req->request_path, &filestat) >=0 );
-
-    snprintf(res->content_length, 16,"%lld", filestat.st_size);
+    snprintf(res->content_length, 16,"%lld", res->filestat.st_size);
     res->status = OK_S;
     res->content_type = mdt_detect_type(req->request_path);
     res->charset = CHARSET;
@@ -329,7 +324,6 @@ int mdt_send_get_response(conn_state* state) {
         mdt_fatal(ERRSYS, "error opening file: %s", s);
     }
 
-    file_len = 0;
     if( sendfile(file_fd, state->conn->open_sd, 0, &file_len, NULL, 0) < 0 ) {
         char *s = strerror(errno);
         mdt_fatal(ERRSYS, "error writing file: %s", s);
@@ -356,7 +350,7 @@ int mdt_send_404_response(conn_state* state) {
                             404 File Not Found\n                                        \
                             </p>\n                                                      \
                         </body>\n                                                       \
-                    </html>%s";
+                    </html>";
 
     mdt_res_write(state->conn, res);
 
@@ -380,24 +374,53 @@ int mdt_cleanup(conn_state* state) {
     return DONE;
 }
 
+void mdt_res_init(response* res) {
+    res->buffer_index = 0;
+    res->content_type = NULL;
+    res->charset = NULL;
+    res->http_version = NULL;
+    res->status = NULL;
+    res->current_time = NULL;
+    res->expires = NULL;
+    res->servername = NULL;
+    res->connection = NULL;
+    res->content = NULL;
+    res->file = NULL;
+    res->mimetype = NULL;
+
+    memset(&(res->filestat), 0, sizeof(struct stat));
+}
+
 int mdt_res_write(conn_data* conn, response* res) {
     assert((res)->http_version != NULL && res->status != NULL && "HTTP version & status not set");
-        mdt_res_buff(res, HEADER_FMT, res->http_version, res->status, CRLF);
+
+    mdt_res_buff(res, HEADER_FMT, res->http_version, res->status, CRLF);
+
     if(res->content_type != NULL && res->charset != NULL) {
-        mdt_res_buff(res, CONTENT_FMT, CONTENT_H, res->content_type, res->charset, CRLF); }
+        mdt_res_buff(res, CONTENT_FMT, CONTENT_H, res->content_type, res->charset, CRLF);
+    }
     if(res->current_time != NULL) {
-        mdt_res_buff(res, DATE_FMT, DATE_H, res->current_time, CRLF); }
+        mdt_res_buff(res, DATE_FMT, DATE_H, res->current_time, CRLF);
+    }
     if(res->content_length != NULL) {
-        mdt_res_buff(res, HEADER_FMT, CONTENT_LENGTH_H, res->content_length, CRLF); }
+        mdt_res_buff(res, HEADER_FMT, CONTENT_LENGTH_H, res->content_length, CRLF);
+    }
     if(res->expires != NULL) {
-        mdt_res_buff(res, HEADER_FMT, EXPIRES_H, res->expires, CRLF); }
+        mdt_res_buff(res, HEADER_FMT, EXPIRES_H, res->expires, CRLF);
+    }
     if(res->expires != NULL) {
-        mdt_res_buff(res, HEADER_FMT, SERVER_H, res->servername, CRLF); }
+        mdt_res_buff(res, HEADER_FMT, SERVER_H, res->servername, CRLF);
+    }
     if(res->connection != NULL) {
-        mdt_res_buff(res, HEADER_FMT, CONN_H, res->connection, CRLF); }
+        mdt_res_buff(res, HEADER_FMT, CONN_H, res->connection, CRLF);
+    }
+
     mdt_res_buff(res, "%s", CRLF);
+
     if(res->content != NULL) {
-        mdt_res_buff(res, res->content, CRLF); }
+        mdt_res_buff(res, "%s", res->content);
+        mdt_res_buff(res, "%s", CRLF);
+    }
     if(write(conn->open_sd, res->buffer, res->buffer_index) < 0) {
         mdt_log(LOGINFO, "socket write failed");
         return -1;
@@ -408,22 +431,20 @@ int mdt_res_write(conn_data* conn, response* res) {
 char* mdt_detect_type(char* filename) {
     char *c;
     if( (c = strrchr(filename, '.')) == NULL || strcmp(c, ".txt") == 0 ) {
-        c = MIME_TXT;
+        return MIME_TXT;
     } else if( strcmp(c, ".html") == 0 || strcmp(c, ".htm") == 0) {
-        c = MIME_HTML;
+        return MIME_HTML;
     } else if( strcmp(c, ".jpeg") == 0 || strcmp(c, ".jpg") == 0) {
-        c = MIME_JPG;
+        return MIME_JPG;
     } else if( strcmp(c, ".gif") == 0 ) {
-        c = MIME_GIF;
+        return MIME_GIF;
     } else if( strcmp(c, ".png") == 0 ) {
-        c = MIME_PNG;
+        return MIME_PNG;
     } else if( strcmp(c, ".css") == 0 ) {
-        c = MIME_CSS;
+        return MIME_CSS;
     } else if( strcmp(c, ".js") == 0 ) {
-        c = MIME_JS;
+        return MIME_JS;
     } else {
-        c = MIME_TXT;
+        return MIME_TXT;
     }
-    mdt_log(LOGDEBUG, "detected MIME type: %s", c);
-    return c;
 }

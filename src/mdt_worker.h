@@ -69,6 +69,7 @@ static char* DATE_FMT =			"%s %.24s%s";
 typedef struct response {
     char buffer[RESPSIZE];
     int buffer_index;
+    struct stat filestat;
 
     char* content_type;
     char* charset;
@@ -79,7 +80,7 @@ typedef struct response {
     char* servername;
     char* connection;
     char content_length[16];
-    char* content;				// for testing only
+    char* content;
 
     char* file;
 	char* mimetype;
@@ -139,6 +140,7 @@ int mdt_cleanup(conn_state* state);
 
 char* mdt_detect_type(char* filename);
 int mdt_res_write(conn_data* conn, response* res);
+void mdt_res_init(response* res);
 
 #define mdt_res_buff(r, m, ...)	\
 		do {	\
@@ -154,22 +156,6 @@ int mdt_res_write(conn_data* conn, response* res);
             }	\
             assert((r)->buffer_index < REQSIZE - 1);	\
             (r)->buffer[(r)->buffer_index] = '\0';	\
-		} while(0)
-
-#define mdt_res_init(r)	\
-		do {	\
-			(r)->buffer_index = 0;	\
-			(r)->content_type = NULL;	\
-			(r)->charset = NULL;	\
-			(r)->http_version = NULL;	\
-			(r)->status = NULL;	\
-			(r)->current_time = NULL;	\
-			(r)->expires = NULL;	\
-			(r)->servername = NULL;	\
-			(r)->connection = NULL;	\
-			(r)->content = NULL;	\
-			(r)->file = NULL;	\
-			(r)->mimetype = NULL;	\
 		} while(0)
 
 #define mdt_req_init(r)	\
