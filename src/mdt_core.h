@@ -39,8 +39,8 @@ All rights reserved
 #define TIMESTAMP_SIZE	32
 
 /* error return types */
-#define ERRPROG			-1
-#define ERRSYS			-2
+#define ERRPROG			-2
+#define ERRSYS			-1
 
 /* logging levels */
 enum {
@@ -88,10 +88,6 @@ struct {
 	uint16_t port;
 	uint32_t address;
 } options_info;
-
-void mdt_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
-void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
-void mdt_usage();
 
 /* MACRO DEFINITIONS */
 #ifdef DEBUG
@@ -142,6 +138,6 @@ void mdt_usage();
 		    exit((e));	\
 		} while(0)
 
-#define mdt_version() printf("  %s version %d.%d.%d%s\n", APP_NAME, MAJOR_V, MINOR_V, PATCH_V, PRERELEASE_V)
+#define mdt_version() printf("%s version %d.%d.%d%s\n", APP_NAME, MAJOR_V, MINOR_V, PATCH_V, PRERELEASE_V)
 
 #endif /* mdt_core_h */

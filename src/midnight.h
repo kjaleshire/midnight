@@ -25,6 +25,9 @@ static struct option optstruct[] = {
 };
 
 void mdt_options_init();
+void mdt_usage();
 void mdt_log_init();
+void mdt_accept_cb(struct ev_loop* loop, ev_io* watcher_accept, int revents);
+void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents);
 
 #endif /* midnight_h */
