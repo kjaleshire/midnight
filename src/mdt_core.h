@@ -18,6 +18,7 @@ All rights reserved
 #include <pthread.h>
 #include <assert.h>
 #include <time.h>
+#include <string.h>
 #include <semaphore.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -64,7 +65,6 @@ typedef struct conn_data {
 
 typedef struct thread_info {
 	pthread_t thread_id;
-	int thread_continue;
 } thread_info;
 
 struct {
@@ -89,7 +89,7 @@ struct {
 	uint32_t address;
 } options_info;
 
-/* log+fatal macro defs */
+/* log+fatal macros */
 #ifdef DEBUG
 #define LOG_FD stdout
 #define mdt_log(e, m, ...)	\

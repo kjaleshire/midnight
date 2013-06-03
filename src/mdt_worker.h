@@ -12,59 +12,58 @@ All rights reserved
 
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <string.h>
 
 /* buffer sizes */
 static const int RESPSIZE =		8 * 1024;
 static const int REQSIZE =		8 * 1024;
 
 /* request types */
-static char* GET =			"GET";
-static char* POST =			"POST";
-static char* OPTIONS =		"OPTIONS";
-static char* HEAD =			"HEAD";
-static char* PUT =			"PUT";
+static const char* GET =			"GET";
+static const char* POST =			"POST";
+static const char* OPTIONS =		"OPTIONS";
+static const char* HEAD =			"HEAD";
+static const char* PUT =			"PUT";
 
 /* response status types */
-static char* HTTP11 =		"HTTP/1.1";
-static char* OK_S =			"200 OK";
-static char* NF_S =			"404 Not Found";
-static char* SRVERR_S =		"500 Internal Server Error";
+static const char* HTTP11 =			"HTTP/1.1";
+static const char* OK_S =			"200 OK";
+static const char* NF_S =			"404 Not Found";
+static const char* SRVERR_S =		"500 Internal Server Error";
 
 /* HTTP headers */
-static char* DATE_H =			"Date:";
-static char* CONTENT_H =		"Content-Type:";
-static char* EXPIRES_H =		"Expires:";
-static char* SERVER_H =			"Server:";
-static char* HOST_H =			"Host:";
-static char* CONN_H =			"Connection:";
-static char* CONTENT_LENGTH_H =	"Content-Length:";
+static const char* DATE_H =				"Date:";
+static const char* CONTENT_H =			"Content-Type:";
+static const char* EXPIRES_H =			"Expires:";
+static const char* SERVER_H =			"Server:";
+static const char* HOST_H =				"Host:";
+static const char* CONN_H =				"Connection:";
+static const char* CONTENT_LENGTH_H =	"Content-Length:";
 
 /* HTTP header stock values	*/
-static char* CONN_CLOSE	=		"close";
-static char* CONN_KEEPALIVE =	"keep-alive";
-static char* SERVER_NAME =		APP_NAME;
-static char* EXPIRES_NEVER =	"-1";
+static const char* CONN_CLOSE	=		"close";
+static const char* CONN_KEEPALIVE =		"keep-alive";
+static const char* SERVER_NAME =		APP_NAME;
+static const char* EXPIRES_NEVER =		"-1";
 
 /* MIME types... */
-static char* MIME_HTML =		"text/html;";
-static char* MIME_JPG =			"image/jpeg;";
-static char* MIME_GIF =			"image/gif;";
-static char* MIME_PNG =			"image/png;";
-static char* MIME_CSS =			"text/css;";
-static char* MIME_JS =			"application/javascript;";
-static char* MIME_TXT =			"text/plain;";
+static const char* MIME_HTML =			"text/html;";
+static const char* MIME_JPG =			"image/jpeg;";
+static const char* MIME_GIF =			"image/gif;";
+static const char* MIME_PNG =			"image/png;";
+static const char* MIME_CSS =			"text/css;";
+static const char* MIME_JS =			"application/javascript;";
+static const char* MIME_TXT =			"text/plain;";
 
 /* default character set */
-static char* CHARSET =			"charset=utf-8";
+static const char* CHARSET =			"charset=utf-8";
 
 /* HTTP line terminator */
-static char* CRLF =				"\r\n";
+static const char* CRLF =				"\r\n";
 
 /* header formats */
-static char* HEADER_FMT =		"%s %s%s";
-static char* CONTENT_FMT =		"%s %s %s%s";
-static char* DATE_FMT =			"%s %.24s%s";
+static const char* HEADER_FMT =			"%s %s%s";
+static const char* CONTENT_FMT =		"%s %s %s%s";
+static const char* DATE_FMT =			"%s %.24s%s";
 
 typedef struct response {
     char buffer[RESPSIZE];
@@ -124,8 +123,6 @@ struct {
 	conn_state_cb cleanup;
 } state_actions;
 
-void mdt_worker(thread_info* opts);
-
 int mdt_state_init(conn_state* state);
 int mdt_state_event(conn_state* state, int event);
 
@@ -143,11 +140,10 @@ int mdt_res_write(conn_data* conn, response* res);
 void mdt_res_init(response* res);
 void mdt_req_init(request* req);
 void mdt_req_destroy(request* req);
-void mdt_set_state_actions();
 
 #define mdt_res_buff(r, m, ...)	\
 		do {	\
-			(r)->buffer_index += snprintf(&((r)->buffer[(r)->buffer_index]), \
+			(r)->buffer_index += snprintf(&(r)->buffer[(r)->buffer_index], \
 			RESPSIZE - (r)->buffer_index, (m), ##__VA_ARGS__);	\
 			assert((r)->buffer_index < RESPSIZE);	\
 		} while(0)

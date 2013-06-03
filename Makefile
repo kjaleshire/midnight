@@ -1,5 +1,5 @@
 CC=clang
-CFLAGS=-Isrc/
+CFLAGS=-Isrc/ -Wno-incompatible-pointer-types
 ANALYZEFLAGS=--analyze -Wall -DDEBUG
 DEBUGFLAGS=-O0 -g -DDEBUG
 PRODFLAGS=-O4

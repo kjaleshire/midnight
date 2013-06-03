@@ -8,15 +8,12 @@ All rights reserved
 */
 
 #include <mdt_core.h>
-#include <mdt_hash.h>
-#include <http11_parser.h>
-#include <mdt_worker.h>
 #include <midnight.h>
 
-int listen_sd;
-thread_info *threads;
+void mdt_set_state_actions();
+int mdt_worker(thread_info* threadopts);
 
-int main(int argc, char *argv[]){
+int main(int argc, const char *argv[]){
 	int v;
 	struct sockaddr_in servaddr;
 
@@ -74,29 +71,24 @@ int main(int argc, char *argv[]){
 		mdt_fatal(ERRSYS, "socket create & bind fail on %s",
 			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : inet_ntoa(servaddr.sin_addr));
 	}
-	else {
-		TRACE();
-	}
+	TRACE();
 
 	if( (queue_info.sem_q_empty = sem_open("empty", O_CREAT, 0644, options_info.n_threads * MAXQUEUESIZE)) == SEM_FAILED ||
 		(queue_info.sem_q_full = sem_open("full", O_CREAT, 0644, 0)) == SEM_FAILED ||
 		(sem_unlink("empty") != 0 && errno != ENOENT) ||
-		(sem_unlink("full") != 0 && errno != ENOENT) )
-		 {
-		 	char *s = strerror(errno);
-			mdt_fatal(ERRSYS, "queue semaphore create fail: %s", s);
+		(sem_unlink("full") != 0 && errno != ENOENT) ) {
+			mdt_fatal(ERRSYS, "queue semaphore create fail: %s", strerror(errno));
 	}
 
 	if( pthread_mutex_init(&queue_info.mtx_conn_queue, NULL) != 0 ) {
 		mdt_fatal(ERRSYS, "queue mutex create fail");
 	}
 
-	STAILQ_INIT(&(queue_info.conn_queue));
+	STAILQ_INIT(&queue_info.conn_queue);
 
 	threads = calloc(options_info.n_threads, sizeof(thread_info));
 	for(v = 0; v < options_info.n_threads; v++) {
-		threads[v].thread_continue = 0;
-		if(	pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) mdt_worker, &threads[v]) < 0) {
+		if(	pthread_create(&threads[v].thread_id, NULL, (void *(*)(void *)) mdt_worker, &threads[v]) < 0) {
 			mdt_fatal(ERRSYS, "thread pool spawn fail");
 		}
 	}
@@ -119,7 +111,7 @@ void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 	socklen_t sock_size = sizeof(struct sockaddr_in);
 	conn_data *conn = malloc(sizeof(conn_data));
 
-	if( (conn->open_sd = accept(listen_sd, (struct sockaddr *) &(conn->conn_info), &sock_size)) < 0) {
+	if( (conn->open_sd = accept(listen_sd, (struct sockaddr *) &conn->conn_info, &sock_size)) < 0) {
 		mdt_fatal(ERRSYS, "accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));
 	} else {
 		#ifdef DEBUG
@@ -155,8 +147,7 @@ void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents)
 
 	if( sem_close(queue_info.sem_q_full) != 0 ||
 		sem_close(queue_info.sem_q_empty) != 0 ) {
-		char *s = strerror(errno);
-		mdt_log(LOGDEBUG, "queue semaphore close fail: %s", s);
+		mdt_log(LOGDEBUG, "queue semaphore close fail: %s", strerror(errno));
 	}
 
 	for(int i = 0; i < options_info.n_threads; i++) {

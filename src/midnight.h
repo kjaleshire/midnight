@@ -13,6 +13,9 @@ All rights reserved
 #include <getopt.h>
 #include <sys/socket.h>
 
+static int listen_sd;
+static thread_info* threads;
+
 static struct option optstruct[] = {
 	{ "help", no_argument, NULL, 'h'},
 	{ "error", no_argument, NULL, 'e'},

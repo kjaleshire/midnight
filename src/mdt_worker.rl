@@ -77,7 +77,7 @@ void mdt_worker(thread_info *opts) {
 
 	state = malloc(sizeof(conn_state));
 
-	while(!opts->thread_continue) {
+	for(;;) {
 		#ifdef DEBUG
 		mdt_log(LOGDEBUG, "awaiting new connection");
 		#endif
@@ -169,7 +169,6 @@ int mdt_parse_exec(conn_state* state) {
 		return CLOSE;
 	}
 
-	/* TODO replace assert here with handler in case request is larger than REQSIZE */
 	assert(req->buffer_index < REQSIZE && "request size too large. refactor into HTTP Error 413");
 	http_parser_execute(state->parser, req->buffer, req->buffer_index, state->parser->nread);
 	TRACE();
@@ -194,29 +193,7 @@ int mdt_read_request_method(conn_state* state) {
 
 	mdt_res_init(res);
 
-	time_t ticks = time(NULL);
-
-	res->http_version = HTTP11;
-	res->current_time = ctime(&ticks);
-	res->servername = SERVER_NAME;
-	res->connection = CONN_CLOSE;
-
 	TRACE();
-
-/*
-	#ifdef DEBUG
-	mdt_log(LOGDEBUG, "Request method: %s", req->request_method);
-	mdt_log(LOGDEBUG, "Request URI: %s", req->request_uri);
-	mdt_log(LOGDEBUG, "Fragment: %s", req->fragment);
-	mdt_log(LOGDEBUG, "Request path: %s", req->request_path);
-	mdt_log(LOGDEBUG, "Query string: %s", req->query_string);
-	mdt_log(LOGDEBUG, "HTTP version: %s", req->http_version);
-	http_header *s, *tmp;
-	HASH_ITER(hh, req->table, s, tmp) {
-		mdt_log(LOGDEBUG, "%s: %s", s->key, s->value);
-	}
-	#endif
-*/
 
 	state->res = res;
 	if(strcmp(req->request_method, GET) == 0) {
@@ -230,21 +207,19 @@ int mdt_send_request_invalid(conn_state* state) {
 	response* res;
 	time_t ticks;
 
-	if(state->res == NULL) {
-		state->res = malloc(sizeof(response));
-
-		state->res->http_version = HTTP11;
-		state->res->current_time = ctime(&ticks);
-		state->res->servername = APP_NAME;
-		state->res->connection = CONN_CLOSE;
-	}
-
+	state->res = malloc(sizeof(response));
 	res = state->res;
 
 	TRACE();
 	mdt_log(LOGINFO, "500 Internal Server Error");
 
+	ticks = time(NULL);
+
+	res->http_version = HTTP11;
 	res->status = SRVERR_S;
+	res->current_time = ctime(&ticks);
+	res->servername = APP_NAME;
+	res->connection = CONN_CLOSE;
 	res->content_type = MIME_HTML;
 	res->charset = CHARSET;
 	res->content =  "<html>\n                                                             \
@@ -276,7 +251,7 @@ int mdt_validate_get(conn_state* state) {
 
 	char *s = calloc(n + 1, sizeof(char));
 
-	sprintf(s, "%s%s%s", options_info.docroot, req->request_path, f);
+	snprintf(s, n, "%s%s%s", options_info.docroot, req->request_path, f);
 
 	assert(strlen(s) == n);
 	mdt_log(LOGDEBUG, "new request_path: %s", s);
@@ -287,9 +262,9 @@ int mdt_validate_get(conn_state* state) {
 
 	if(req->request_path == NULL || req->request_uri == NULL) {
 		return GET_NOT_VALID;
-	} else if (stat(req->request_path, &(state->res->filestat)) < 0 && errno == ENOENT) {
+	} else if (stat(req->request_path, &state->res->filestat) < 0 && errno == ENOENT) {
 		*(req->request_path + strlen(req->request_path) - 2) = '\0';
-		if (stat(req->request_path, &(state->res->filestat)) < 0 && errno == ENOENT) {
+		if (stat(req->request_path, &state->res->filestat) < 0 && errno == ENOENT) {
 			return GET_NOT_FOUND;
 		}
 	}
@@ -300,6 +275,7 @@ int mdt_validate_get(conn_state* state) {
 int mdt_send_get_response(conn_state* state) {
 	response* res = state->res;
 	request* req = (request *) state->parser->data;
+	time_t ticks;
 
 	TRACE();
 	#ifdef DEBUG
@@ -309,8 +285,14 @@ int mdt_send_get_response(conn_state* state) {
 	off_t file_len = 0;
 	int file_fd;
 
-	snprintf(res->content_length, 16,"%lld", res->filestat.st_size);
+	ticks = time(NULL);
+
+	res->http_version = HTTP11;
 	res->status = OK_S;
+	res->current_time = ctime(&ticks);
+	res->servername = SERVER_NAME;
+	res->connection = CONN_CLOSE;
+	snprintf(res->content_length, 16,"%lld", res->filestat.st_size);
 	res->content_type = mdt_detect_type(req->request_path);
 	res->charset = CHARSET;
 	res->expires = EXPIRES_NEVER;
@@ -320,13 +302,11 @@ int mdt_send_get_response(conn_state* state) {
 	}
 
 	if( (file_fd = open(req->request_path, O_RDONLY)) < 0 ) {
-		char *s = strerror(errno);
-		mdt_fatal(ERRSYS, "error opening file: %s", s);
+		mdt_fatal(ERRSYS, "error opening file: %s", strerror(errno));
 	}
 
 	if( sendfile(file_fd, state->conn->open_sd, 0, &file_len, NULL, 0) < 0 ) {
-		char *s = strerror(errno);
-		mdt_fatal(ERRSYS, "error writing file: %s", s);
+		mdt_fatal(ERRSYS, "error writing file: %s", strerror(errno));
 	}
 
 	TRACE();
@@ -337,10 +317,15 @@ int mdt_send_get_response(conn_state* state) {
 
 int mdt_send_404_response(conn_state* state) {
 	response* res = state->res;
+	time_t ticks;
 	TRACE();
 	mdt_log(LOGDEBUG, "404 Not Found");
 
+	res->http_version = HTTP11;
 	res->status = NF_S;
+	res->current_time = ctime(&ticks);
+	res->servername = SERVER_NAME;
+	res->connection = CONN_CLOSE;
 	res->content_type = MIME_HTML;
 	res->charset = CHARSET;
 	res->expires = EXPIRES_NEVER;
@@ -387,8 +372,6 @@ void mdt_res_init(response* res) {
 	res->content = NULL;
 	res->file = NULL;
 	res->mimetype = NULL;
-
-	memset(&(res->filestat), 0, sizeof(struct stat));
 }
 
 void mdt_req_init(request* req) {
