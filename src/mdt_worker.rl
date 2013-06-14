@@ -71,56 +71,33 @@ All rights reserved
 
 %% write data;
 
-void mdt_worker(thread_info *opts) {
+mdt_conn_handler = ^(conn_data* conn) {
 	int next;
 	conn_state *state;
 
 	state = malloc(sizeof(conn_state));
 
+	#ifdef DEBUG
+	mdt_log(LOGDEBUG, "awaiting new connection");
+	#endif
+
+	TRACE();
+	state->conn = conn;
+
+	next = OPEN;
+
+	mdt_state_init(state);
+
 	for(;;) {
-		#ifdef DEBUG
-		mdt_log(LOGDEBUG, "awaiting new connection");
-		#endif
-
-		TRACE();
-		/*  wait for the sem_q_full semaphore; posting means a conn_data has been queued
-			proceed to lock queue, pull conn_data off, unlock, and post to sem_q_empty */
-		sem_wait(queue_info.sem_q_full);
-		pthread_mutex_lock(&queue_info.mtx_conn_queue);
-		state->conn = STAILQ_FIRST(&queue_info.conn_queue);
-		STAILQ_REMOVE_HEAD(&queue_info.conn_queue, q_next);
-		pthread_mutex_unlock(&queue_info.mtx_conn_queue);
-		sem_post(queue_info.sem_q_empty);
-
-		if(state->conn->open_sd == -1) {
+		if(next == DONE) {
 			break;
 		}
-
-		#ifdef DEBUG
-		mdt_log(LOGDEBUG, "dequeued client %s", inet_ntoa(state->conn->conn_info.sin_addr));
-		#endif
-
-		next = OPEN;
-
-		mdt_state_init(state);
-
-		for(;;) {
-			if(next == DONE) {
-				break;
-			}
-			next = mdt_state_event(state, next);
-		}
-
-		#ifdef DEBUG
-		mdt_log(LOGDEBUG, "finished handling connection");
-		#endif
+		next = mdt_state_event(state, next);
 	}
 
 	#ifdef DEBUG
-	mdt_log(LOGDEBUG, "thread quitting!");
+	mdt_log(LOGDEBUG, "finished handling connection");
 	#endif
-	next = 0;
-	pthread_exit(&next);
 }
 
 int mdt_state_event(conn_state* state, int event) {

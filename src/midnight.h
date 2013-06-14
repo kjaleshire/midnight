@@ -14,7 +14,6 @@ All rights reserved
 #include <sys/socket.h>
 
 static int listen_sd;
-static thread_info* threads;
 
 static struct option optstruct[] = {
 	{ "help", no_argument, NULL, 'h'},
@@ -23,7 +22,6 @@ static struct option optstruct[] = {
 	{ "port", required_argument, NULL, 'p'},
 	{ "address", required_argument, NULL, 'a'},
 	{ "docroot", required_argument, NULL, 'd'},
-	{ "nthreads", required_argument, NULL, 't'},
 	{ "version", no_argument, NULL, 'v'}
 };
 

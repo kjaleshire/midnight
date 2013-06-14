@@ -15,15 +15,12 @@ All rights reserved
 #include <unistd.h>
 #include <sys/types.h>
 #include <errno.h>
-#include <pthread.h>
 #include <assert.h>
 #include <time.h>
 #include <string.h>
-#include <semaphore.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ev.h>					// libev event handler
-#include <sys/queue.h>			// queue macros
 
 /* app meta constants */
 #define APP_NAME		"midnight"
@@ -60,19 +57,7 @@ enum {
 typedef struct conn_data {
     int open_sd;
     struct sockaddr_in conn_info;
-    STAILQ_ENTRY(conn_data) q_next;
 } conn_data;
-
-typedef struct thread_info {
-	pthread_t thread_id;
-} thread_info;
-
-struct {
-	sem_t* sem_q_empty;
-	sem_t* sem_q_full;
-	pthread_mutex_t mtx_conn_queue;
-	STAILQ_HEAD(queue_struct, conn_data) conn_queue;
-} queue_info;
 
 struct {
 	int log_level;
@@ -83,11 +68,12 @@ struct {
 } log_info;
 
 struct {
-	int n_threads;
 	char* docroot;
 	uint16_t port;
 	uint32_t address;
 } options_info;
+
+void (^mdt_conn_handler) (conn_data*);
 
 /* log+fatal macros */
 #define LOG_FD stderr

@@ -11,7 +11,6 @@ All rights reserved
 #include <midnight.h>
 
 void mdt_set_state_actions();
-int mdt_worker(thread_info* threadopts);
 
 int main(int argc, const char *argv[]){
 	int v;
@@ -23,7 +22,7 @@ int main(int argc, const char *argv[]){
 
 	mdt_options_init();
 
-	while( (v = getopt_long(argc, argv, "eqp:a:d:t:vh", optstruct, NULL)) != -1 ) {
+	while( (v = getopt_long(argc, argv, "eqp:a:d:vh", optstruct, NULL)) != -1 ) {
 		switch(v) {
 			case 'e':
 				log_info.log_level = LOGERR;
@@ -39,9 +38,6 @@ int main(int argc, const char *argv[]){
 				break;
 			case 'p':
 				options_info.port = htons(strtol(optarg, NULL, 0));
-				break;
-			case 't':
-				options_info.n_threads = strtol(optarg, NULL, 0);
 				break;
 			case 'v':
 				mdt_version();
@@ -73,26 +69,6 @@ int main(int argc, const char *argv[]){
 	}
 	TRACE();
 
-	if( (queue_info.sem_q_empty = sem_open("empty", O_CREAT, 0644, options_info.n_threads * MAXQUEUESIZE)) == SEM_FAILED ||
-		(queue_info.sem_q_full = sem_open("full", O_CREAT, 0644, 0)) == SEM_FAILED ||
-		(sem_unlink("empty") != 0 && errno != ENOENT) ||
-		(sem_unlink("full") != 0 && errno != ENOENT) ) {
-			mdt_fatal(ERRSYS, "queue semaphore create fail: %s", strerror(errno));
-	}
-
-	if( pthread_mutex_init(&queue_info.mtx_conn_queue, NULL) != 0 ) {
-		mdt_fatal(ERRSYS, "queue mutex create fail");
-	}
-
-	STAILQ_INIT(&queue_info.conn_queue);
-
-	threads = calloc(options_info.n_threads, sizeof(thread_info));
-	for(v = 0; v < options_info.n_threads; v++) {
-		if(	pthread_create(&threads[v].thread_id, NULL, (void *(*)(void *)) mdt_worker, &threads[v]) < 0) {
-			mdt_fatal(ERRSYS, "thread pool spawn fail");
-		}
-	}
-
 	default_loop = EV_DEFAULT;
 
 	ev_signal_init(watcher_sigint, mdt_sigint_cb, SIGINT);
@@ -119,11 +95,7 @@ void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 		#endif
 	}
 
-	sem_wait(queue_info.sem_q_empty);
-	pthread_mutex_lock(&queue_info.mtx_conn_queue);
-	STAILQ_INSERT_TAIL(&queue_info.conn_queue, conn, q_next);
-	pthread_mutex_unlock(&queue_info.mtx_conn_queue);
-	sem_post(queue_info.sem_q_full);
+	/* TODO queue new worker task here with connection info */
 
 	TRACE();
 	#ifdef DEBUG
@@ -134,25 +106,9 @@ void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
 	TRACE();
 	close(listen_sd);
-	conn_data no_conn[options_info.n_threads];
 
-	for(int i = 0; i < options_info.n_threads; i++) {
-		no_conn[i].open_sd = -1;
-		sem_wait(queue_info.sem_q_empty);
-		pthread_mutex_lock(&queue_info.mtx_conn_queue);
-		STAILQ_INSERT_TAIL(&queue_info.conn_queue, &no_conn[i], q_next);
-		pthread_mutex_unlock(&queue_info.mtx_conn_queue);
-		sem_post(queue_info.sem_q_full);
-	}
+	/* TODO wait for all tasks to finish here */
 
-	if( sem_close(queue_info.sem_q_full) != 0 ||
-		sem_close(queue_info.sem_q_empty) != 0 ) {
-		mdt_log(LOGDEBUG, "queue semaphore close fail: %s", strerror(errno));
-	}
-
-	for(int i = 0; i < options_info.n_threads; i++) {
-		pthread_join(threads[i].thread_id, NULL);
-	}
 	#ifdef DEBUG
 	mdt_log(LOGDEBUG, "process quitting!");
 	#endif
@@ -170,7 +126,6 @@ void mdt_log_init() {
 }
 
 void mdt_options_init() {
-	options_info.n_threads = 2;
 	options_info.address = htonl(INADDR_ANY);
 	options_info.port = htons(DEFAULT_PORT);
 	options_info.docroot = DEFAULT_DOCROOT;
@@ -186,7 +141,7 @@ void mdt_options_init() {
 void mdt_usage() {
 	printf("\n");
 	printf("  Usage:\n");
-	printf("\tmidnight [-hevq] [-t threadnum] [-a listenaddress] [-p listenport] [-d docroot]\n");
+	printf("\tmidnight [-hevq] [-a listenaddress] [-p listenport] [-d docroot]\n");
 	printf("  Options:\n");
 	printf("\t-h, --help\t\tthis help\n");
 	printf("\t-e, --error\t\terror-only logging\n");
@@ -194,6 +149,5 @@ void mdt_usage() {
 	printf("\t-p, --port\t\tport to listen on (default 8080)\n");
 	printf("\t-a, --address\t\taddress to bind to (default all)\n");
 	printf("\t-d, --docroot\t\tsite document root directory (default ./docroot)\n");
-	printf("\t-t, --nthreads\t\tnumber of threads to run with (default 2)\n");
 	printf("\t-v, --version\t\tdisplay verison info\n");
 }
