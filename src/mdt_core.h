@@ -90,8 +90,8 @@ struct {
 } options_info;
 
 /* log+fatal macros */
+#define LOG_FD stderr
 #ifdef DEBUG
-#define LOG_FD stdout
 #define mdt_log(e, m, ...)	\
 		do {	\
 			if((e) <= log_info.log_level) {	\
@@ -106,9 +106,7 @@ struct {
 				pthread_mutex_unlock(&log_info.mtx_term);	\
 			}	\
 		} while(0)
-#define TRACE()  mdt_log(LOGDEBUG, "> %s:%d:%s", __FILE__, __LINE__, __FUNCTION__)
 #else
-#define LOG_FD stderr
 #define mdt_log(e, m, ...)	\
 		do {	\
 			if((e) <= log_info.log_level) {	\
@@ -118,6 +116,11 @@ struct {
 				pthread_mutex_unlock(&log_info.mtx_term);	\
 			}	\
 		} while(0)
+#endif
+
+#ifdef DEBUG
+#define TRACE()  mdt_log(LOGDEBUG, "> %s:%d:%s", __FILE__, __LINE__, __FUNCTION__)
+#else
 #define TRACE()
 #endif
 
