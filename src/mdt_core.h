@@ -20,6 +20,7 @@ All rights reserved
 #include <string.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <dispatch/dispatch.h>	// grand central dispatch
 #include <ev.h>					// libev event handler
 
 /* app meta constants */
@@ -60,7 +61,9 @@ typedef struct conn_data {
 } conn_data;
 
 struct {
-	int log_level;
+	dispatch_queue_t queue;
+
+	int level;
 	char timestamp[TIMESTAMP_SIZE];
 	time_t ticks;
 	struct tm* current_time;
@@ -73,33 +76,32 @@ struct {
 	uint32_t address;
 } options_info;
 
-void (^mdt_conn_handler) (conn_data*);
+dispatch_queue_t default_queue;
 
 /* log+fatal macros */
 #define LOG_FD stderr
 #ifdef DEBUG
 #define mdt_log(e, m, ...)	\
 		do {	\
-			if((e) <= log_info.log_level) {	\
+			if((e) <= log_info.level) {	\
 				log_info.ticks = time(NULL);	\
 				log_info.current_time = localtime(&log_info.ticks);	\
 				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMEFORMAT, log_info.current_time);	\
-				pthread_mutex_lock(&log_info.mtx_term);	\
-				fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
-				fprintf(LOG_FD, "%x:\t", (unsigned int) pthread_self());	\
-				fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
-				fprintf(LOG_FD, "\n");	\
-				pthread_mutex_unlock(&log_info.mtx_term);	\
+				dispatch_async(log_info.queue, ^{	\
+					fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
+					fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
+					fprintf(LOG_FD, "\n");	\
+				});	\
 			}	\
 		} while(0)
 #else
 #define mdt_log(e, m, ...)	\
 		do {	\
-			if((e) <= log_info.log_level) {	\
-				pthread_mutex_lock(&log_info.mtx_term);	\
-				fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
-				fprintf(LOG_FD, "\n");	\
-				pthread_mutex_unlock(&log_info.mtx_term);	\
+			if((e) <= log_info.level) {	\
+				dispatch_async(log_info.queue, ^{	\
+					fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
+					fprintf(LOG_FD, "\n");	\
+				});	\
 			}	\
 		} while(0)
 #endif
@@ -113,18 +115,18 @@ void (^mdt_conn_handler) (conn_data*);
 /* spoilers: everyone dies */
 #define mdt_fatal(e, m, ...)	\
 		do {	\
-		    if(LOGFATAL <= log_info.log_level) {	\
-		    	log_info.ticks = time(NULL);	\
+			if(LOGFATAL <= log_info.level) {	\
+				log_info.ticks = time(NULL);	\
 				log_info.current_time = localtime(&log_info.ticks);	\
 				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMEFORMAT, log_info.current_time);	\
-		        pthread_mutex_lock(&log_info.mtx_term);	\
-		        fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
-		        fprintf(LOG_FD, "%x:\t> %s:%d:%s:\tfatal: \"", (unsigned int) pthread_self(), __FILE__, __LINE__, __FUNCTION__);	\
-		        fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
-		        fprintf(LOG_FD, "\"\n");	\
-		        pthread_mutex_unlock(&log_info.mtx_term);	\
-		    }	\
-		    exit((e));	\
+				dispatch_sync(log_info.queue, ^{	\
+			        fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
+			        fprintf(LOG_FD, ":\t> %s:%d:%s:\tfatal: \"", __FILE__, __LINE__, __FUNCTION__);	\
+			        fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
+			        fprintf(LOG_FD, "\"\n");	\
+				});	\
+				exit((e));	\
+			}	\
 		} while(0)
 
 #define mdt_version() printf("%s version %d.%d.%d%s\n", APP_NAME, MAJOR_V, MINOR_V, PATCH_V, PRERELEASE_V)

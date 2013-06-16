@@ -11,6 +11,7 @@ All rights reserved
 #include <midnight.h>
 
 void mdt_set_state_actions();
+void mdt_dispatch_connection(conn_data*);
 
 int main(int argc, const char *argv[]){
 	int v;
@@ -20,15 +21,17 @@ int main(int argc, const char *argv[]){
 	ev_io* watcher_accept = malloc(sizeof(ev_io));
 	ev_signal* watcher_sigint = malloc(sizeof(ev_signal));
 
-	mdt_options_init();
+	default_queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+
+	log_info.queue = dispatch_queue_create("com.kja.logqueue", NULL);
 
 	while( (v = getopt_long(argc, argv, "eqp:a:d:vh", optstruct, NULL)) != -1 ) {
 		switch(v) {
 			case 'e':
-				log_info.log_level = LOGERR;
+				log_info.level = LOGERR;
 				break;
 			case 'q':
-				log_info.log_level = LOGNONE;
+				log_info.level = LOGNONE;
 				break;
 			case 'd':
 				options_info.docroot = optarg;
@@ -79,6 +82,10 @@ int main(int argc, const char *argv[]){
 
 	TRACE();
 
+	#ifdef DEBUG
+	mdt_log(LOGDEBUG, "entering event loop here");
+	#endif
+
 	ev_run(default_loop, 0);
 }
 
@@ -95,7 +102,7 @@ void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 		#endif
 	}
 
-	/* TODO queue new worker task here with connection info */
+	mdt_dispatch_connection(conn);
 
 	TRACE();
 	#ifdef DEBUG
@@ -115,25 +122,15 @@ void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents)
 	exit(0);
 }
 
-void mdt_log_init() {
-	pthread_mutexattr_t mtx_attr;
-	if( pthread_mutexattr_init(&mtx_attr) != 0 ||
-	pthread_mutexattr_settype(&mtx_attr, PTHREAD_MUTEX_RECURSIVE) != 0 ||
-	pthread_mutex_init(&log_info.mtx_term, &mtx_attr) != 0 ) {
-	    printf("System error: unable to initialize terminal mutex");
-	    exit(ERRSYS);
-	}
-}
-
 void mdt_options_init() {
 	options_info.address = htonl(INADDR_ANY);
 	options_info.port = htons(DEFAULT_PORT);
 	options_info.docroot = DEFAULT_DOCROOT;
 
 	#ifdef DEBUG
-	log_info.log_level = LOGDEBUG;
+	log_info.level = LOGDEBUG;
 	#else
-	log_info.log_level = LOGINFO;
+	log_info.level = LOGINFO;
 	#endif
 
 }

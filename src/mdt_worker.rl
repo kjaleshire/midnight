@@ -71,33 +71,35 @@ All rights reserved
 
 %% write data;
 
-mdt_conn_handler = ^(conn_data* conn) {
-	int next;
-	conn_state *state;
+void mdt_dispatch_connection(conn_data* conn){
+	dispatch_async(default_queue, ^{
+		int next;
+		conn_state *state;
 
-	state = malloc(sizeof(conn_state));
+		#ifdef DEBUG
+		mdt_log(LOGDEBUG, "new connection block enqueued");
+		#endif
 
-	#ifdef DEBUG
-	mdt_log(LOGDEBUG, "awaiting new connection");
-	#endif
+		state = malloc(sizeof(conn_state));
 
-	TRACE();
-	state->conn = conn;
+		TRACE();
+		state->conn = conn;
 
-	next = OPEN;
+		next = OPEN;
 
-	mdt_state_init(state);
+		mdt_state_init(state);
 
-	for(;;) {
-		if(next == DONE) {
-			break;
+		for(;;) {
+			if(next == DONE) {
+				break;
+			}
+			next = mdt_state_event(state, next);
 		}
-		next = mdt_state_event(state, next);
-	}
 
-	#ifdef DEBUG
-	mdt_log(LOGDEBUG, "finished handling connection");
-	#endif
+		#ifdef DEBUG
+		mdt_log(LOGDEBUG, "finished handling connection");
+		#endif
+	});
 }
 
 int mdt_state_event(conn_state* state, int event) {
