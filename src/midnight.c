@@ -13,7 +13,7 @@ All rights reserved
 void mdt_set_state_actions();
 void mdt_dispatch_connection(conn_data*);
 
-int main(int argc, const char *argv[]){
+int main(int argc, char *argv[]){
 	int v;
 	struct sockaddr_in servaddr;
 
@@ -21,9 +21,7 @@ int main(int argc, const char *argv[]){
 	ev_io* watcher_accept = malloc(sizeof(ev_io));
 	ev_signal* watcher_sigint = malloc(sizeof(ev_signal));
 
-	default_queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
-
-	log_info.queue = dispatch_queue_create("com.kja.logqueue", NULL);
+	log_info.queue = dispatch_queue_create("com.kja.midnight.logqueue", NULL);
 
 	while( (v = getopt_long(argc, argv, "eqp:a:d:vh", optstruct, NULL)) != -1 ) {
 		switch(v) {
@@ -61,14 +59,13 @@ int main(int argc, const char *argv[]){
 
 	v = 1;
 	if( (listen_sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 ||
-	#ifdef DEBUG
-		setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(v)) < 0 ||	// so we can quickly reuse port
-	#endif
-		bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
-		listen(listen_sd, LISTENQ) < 0
-	) {
+#ifdef DEBUG
+	setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(v)) < 0 ||	// so we can quickly reuse port
+#endif
+	bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
+	listen(listen_sd, LISTENQ) < 0 ) {
 		mdt_fatal(ERRSYS, "socket create & bind fail on %s",
-			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : inet_ntoa(servaddr.sin_addr));
+		servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : inet_ntoa(servaddr.sin_addr));
 	}
 	TRACE();
 
@@ -102,7 +99,7 @@ void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 		#endif
 	}
 
-	mdt_dispatch_connection(conn);
+	//mdt_dispatch_connection(conn);
 
 	TRACE();
 	#ifdef DEBUG
@@ -113,8 +110,6 @@ void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
 	TRACE();
 	close(listen_sd);
-
-	/* TODO wait for all tasks to finish here */
 
 	#ifdef DEBUG
 	mdt_log(LOGDEBUG, "process quitting!");

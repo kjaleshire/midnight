@@ -72,7 +72,7 @@ All rights reserved
 %% write data;
 
 void mdt_dispatch_connection(conn_data* conn){
-	dispatch_async(default_queue, ^{
+	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 		int next;
 		conn_state *state;
 
@@ -235,7 +235,7 @@ int mdt_validate_get(conn_state* state) {
 	assert(strlen(s) == n);
 	mdt_log(LOGDEBUG, "new request_path: %s", s);
 
-	free(req->request_path);
+	free((void*) req->request_path);
 	req->request_path = s;
 	mdt_log(LOGDEBUG, "requested file: %s", req->request_path);
 
@@ -374,22 +374,22 @@ void mdt_req_destroy(request* req) {
 	}
 	req->buffer[0] = '\0';
 	if(req->request_method != NULL) {
-		free(req->request_method);
+		free((void*) req->request_method);
 	}
     if(req->request_uri != NULL) {
-    	free(req->request_uri);
+    	free((void*) req->request_uri);
     }
     if(req->fragment != NULL) {
-    	free(req->fragment);
+    	free((void*) req->fragment);
     }
     if(req->request_path != NULL) {
-    	free(req->request_path);
+    	free((void*) req->request_path);
     }
     if(req->query_string != NULL) {
-    	free(req->query_string);
+    	free((void*) req->query_string);
     }
     if(req->http_version != NULL) {
-    	free(req->http_version);
+    	free((void*) req->http_version);
   	}
 }
 
@@ -430,7 +430,7 @@ int mdt_res_write(conn_data* conn, response* res) {
 	return 0;
 }
 
-char* mdt_detect_type(char* filename) {
+const char* mdt_detect_type(char* filename) {
 	char *c;
 	if( (c = strrchr(filename, '.')) == NULL || strcmp(c, ".txt") == 0 ) {
 		return MIME_TXT;

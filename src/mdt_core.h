@@ -33,8 +33,7 @@ All rights reserved
 
 /* app-wide constants */
 #define LISTENQ			1024
-#define MAXQUEUESIZE	4
-#define TIMEFORMAT		"%H:%M:%S %m.%d.%y"
+#define TIMESTAMP_FMT	"%H:%M:%S %m.%d.%y"
 #define TIMESTAMP_SIZE	32
 
 /* error return types */
@@ -76,21 +75,20 @@ struct {
 	uint32_t address;
 } options_info;
 
-dispatch_queue_t default_queue;
-
 /* log+fatal macros */
-#define LOG_FD stderr
+#define LOG_FD stdout
 #ifdef DEBUG
 #define mdt_log(e, m, ...)	\
 		do {	\
 			if((e) <= log_info.level) {	\
 				log_info.ticks = time(NULL);	\
 				log_info.current_time = localtime(&log_info.ticks);	\
-				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMEFORMAT, log_info.current_time);	\
+				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMESTAMP_FMT, log_info.current_time);	\
 				dispatch_async(log_info.queue, ^{	\
 					fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
 					fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 					fprintf(LOG_FD, "\n");	\
+					fflush(stdout);	\
 				});	\
 			}	\
 		} while(0)
@@ -101,6 +99,7 @@ dispatch_queue_t default_queue;
 				dispatch_async(log_info.queue, ^{	\
 					fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 					fprintf(LOG_FD, "\n");	\
+					fflush(stdout);	\
 				});	\
 			}	\
 		} while(0)
@@ -118,12 +117,13 @@ dispatch_queue_t default_queue;
 			if(LOGFATAL <= log_info.level) {	\
 				log_info.ticks = time(NULL);	\
 				log_info.current_time = localtime(&log_info.ticks);	\
-				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMEFORMAT, log_info.current_time);	\
+				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMESTAMP_FMT, log_info.current_time);	\
 				dispatch_sync(log_info.queue, ^{	\
 			        fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
 			        fprintf(LOG_FD, ":\t> %s:%d:%s:\tfatal: \"", __FILE__, __LINE__, __FUNCTION__);	\
 			        fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 			        fprintf(LOG_FD, "\"\n");	\
+			        fflush(stdout);	\
 				});	\
 				exit((e));	\
 			}	\

@@ -70,19 +70,19 @@ typedef struct response {
     int buffer_index;
     struct stat filestat;
 
-    char* content_type;
-    char* charset;
-    char* http_version;
-    char* status;
-    char* current_time;
-    char* expires;
-    char* servername;
-    char* connection;
+    const char* content_type;
+    const char* charset;
+    const char* http_version;
+    const char* status;
+    const char* current_time;
+    const char* expires;
+    const char* servername;
+    const char* connection;
     char content_length[16];
-    char* content;
+    const char* content;
 
-    char* file;
-	char* mimetype;
+    const char* file;
+	const char* mimetype;
 } response;
 
 typedef struct request {
@@ -91,12 +91,12 @@ typedef struct request {
 
 	http_header* table;
 
-	char* request_method;
-	char* request_uri;
-	char* fragment;
+	const char* request_method;
+	const char* request_uri;
+	const char* fragment;
 	char* request_path;
-	char* query_string;
-	char* http_version;
+	const char* query_string;
+	const char* http_version;
 } request;
 
 typedef struct conn_state {
@@ -135,7 +135,7 @@ int mdt_send_request_invalid(conn_state* state);
 int mdt_send_404_response(conn_state* state);
 int mdt_cleanup(conn_state* state);
 
-char* mdt_detect_type(char* filename);
+const char* mdt_detect_type(char* filename);
 int mdt_res_write(conn_data* conn, response* res);
 void mdt_res_init(response* res);
 void mdt_req_init(request* req);
