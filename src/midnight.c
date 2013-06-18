@@ -11,9 +11,9 @@ All rights reserved
 #include <midnight.h>
 
 void mdt_set_state_actions();
-int mdt_worker(thread_info* threadopts);
+void mdt_dispatch_connection(conn_data*);
 
-int main(int argc, const char *argv[]){
+int main(int argc, char *argv[]){
 	int v;
 	struct sockaddr_in servaddr;
 
@@ -21,15 +21,17 @@ int main(int argc, const char *argv[]){
 	ev_io* watcher_accept = malloc(sizeof(ev_io));
 	ev_signal* watcher_sigint = malloc(sizeof(ev_signal));
 
+	log_info.queue = dispatch_queue_create("com.kja.midnight.logqueue", DISPATCH_QUEUE_SERIAL);
+
 	mdt_options_init();
 
-	while( (v = getopt_long(argc, argv, "eqp:a:d:t:vh", optstruct, NULL)) != -1 ) {
+	while( (v = getopt_long(argc, argv, "eqp:a:d:vh", optstruct, NULL)) != -1 ) {
 		switch(v) {
 			case 'e':
-				log_info.log_level = LOGERR;
+				log_info.level = LOGERR;
 				break;
 			case 'q':
-				log_info.log_level = LOGNONE;
+				log_info.level = LOGNONE;
 				break;
 			case 'd':
 				options_info.docroot = optarg;
@@ -39,9 +41,6 @@ int main(int argc, const char *argv[]){
 				break;
 			case 'p':
 				options_info.port = htons(strtol(optarg, NULL, 0));
-				break;
-			case 't':
-				options_info.n_threads = strtol(optarg, NULL, 0);
 				break;
 			case 'v':
 				mdt_version();
@@ -62,36 +61,15 @@ int main(int argc, const char *argv[]){
 
 	v = 1;
 	if( (listen_sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 ||
-	#ifdef DEBUG
-		setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(v)) < 0 ||	// so we can quickly reuse port
-	#endif
-		bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
-		listen(listen_sd, LISTENQ) < 0
-	) {
+#ifdef DEBUG
+	setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(v)) < 0 ||	// so we can quickly reuse port
+#endif
+	bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
+	listen(listen_sd, LISTENQ) < 0 ) {
 		mdt_fatal(ERRSYS, "socket create & bind fail on %s",
-			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : inet_ntoa(servaddr.sin_addr));
+		servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : inet_ntoa(servaddr.sin_addr));
 	}
 	TRACE();
-
-	if( (queue_info.sem_q_empty = sem_open("empty", O_CREAT, 0644, options_info.n_threads * MAXQUEUESIZE)) == SEM_FAILED ||
-		(queue_info.sem_q_full = sem_open("full", O_CREAT, 0644, 0)) == SEM_FAILED ||
-		(sem_unlink("empty") != 0 && errno != ENOENT) ||
-		(sem_unlink("full") != 0 && errno != ENOENT) ) {
-			mdt_fatal(ERRSYS, "queue semaphore create fail: %s", strerror(errno));
-	}
-
-	if( pthread_mutex_init(&queue_info.mtx_conn_queue, NULL) != 0 ) {
-		mdt_fatal(ERRSYS, "queue mutex create fail");
-	}
-
-	STAILQ_INIT(&queue_info.conn_queue);
-
-	threads = calloc(options_info.n_threads, sizeof(thread_info));
-	for(v = 0; v < options_info.n_threads; v++) {
-		if(	pthread_create(&threads[v].thread_id, NULL, (void *(*)(void *)) mdt_worker, &threads[v]) < 0) {
-			mdt_fatal(ERRSYS, "thread pool spawn fail");
-		}
-	}
 
 	default_loop = EV_DEFAULT;
 
@@ -119,11 +97,7 @@ void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 		#endif
 	}
 
-	sem_wait(queue_info.sem_q_empty);
-	pthread_mutex_lock(&queue_info.mtx_conn_queue);
-	STAILQ_INSERT_TAIL(&queue_info.conn_queue, conn, q_next);
-	pthread_mutex_unlock(&queue_info.mtx_conn_queue);
-	sem_post(queue_info.sem_q_full);
+	mdt_dispatch_connection(conn);
 
 	TRACE();
 	#ifdef DEBUG
@@ -134,59 +108,31 @@ void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
 	TRACE();
 	close(listen_sd);
-	conn_data no_conn[options_info.n_threads];
 
-	for(int i = 0; i < options_info.n_threads; i++) {
-		no_conn[i].open_sd = -1;
-		sem_wait(queue_info.sem_q_empty);
-		pthread_mutex_lock(&queue_info.mtx_conn_queue);
-		STAILQ_INSERT_TAIL(&queue_info.conn_queue, &no_conn[i], q_next);
-		pthread_mutex_unlock(&queue_info.mtx_conn_queue);
-		sem_post(queue_info.sem_q_full);
-	}
-
-	if( sem_close(queue_info.sem_q_full) != 0 ||
-		sem_close(queue_info.sem_q_empty) != 0 ) {
-		mdt_log(LOGDEBUG, "queue semaphore close fail: %s", strerror(errno));
-	}
-
-	for(int i = 0; i < options_info.n_threads; i++) {
-		pthread_join(threads[i].thread_id, NULL);
-	}
 	#ifdef DEBUG
 	mdt_log(LOGDEBUG, "process quitting!");
 	#endif
+
+	dispatch_sync(log_info.queue, ^{});
 	exit(0);
 }
 
-void mdt_log_init() {
-	pthread_mutexattr_t mtx_attr;
-	if( pthread_mutexattr_init(&mtx_attr) != 0 ||
-	pthread_mutexattr_settype(&mtx_attr, PTHREAD_MUTEX_RECURSIVE) != 0 ||
-	pthread_mutex_init(&log_info.mtx_term, &mtx_attr) != 0 ) {
-	    printf("System error: unable to initialize terminal mutex");
-	    exit(ERRSYS);
-	}
-}
-
 void mdt_options_init() {
-	options_info.n_threads = 2;
 	options_info.address = htonl(INADDR_ANY);
 	options_info.port = htons(DEFAULT_PORT);
 	options_info.docroot = DEFAULT_DOCROOT;
 
 	#ifdef DEBUG
-	log_info.log_level = LOGDEBUG;
+	log_info.level = LOGDEBUG;
 	#else
-	log_info.log_level = LOGINFO;
+	log_info.level = LOGINFO;
 	#endif
-
 }
 
 void mdt_usage() {
 	printf("\n");
 	printf("  Usage:\n");
-	printf("\tmidnight [-hevq] [-t threadnum] [-a listenaddress] [-p listenport] [-d docroot]\n");
+	printf("\tmidnight [-hevq] [-a listenaddress] [-p listenport] [-d docroot]\n");
 	printf("  Options:\n");
 	printf("\t-h, --help\t\tthis help\n");
 	printf("\t-e, --error\t\terror-only logging\n");
@@ -194,6 +140,5 @@ void mdt_usage() {
 	printf("\t-p, --port\t\tport to listen on (default 8080)\n");
 	printf("\t-a, --address\t\taddress to bind to (default all)\n");
 	printf("\t-d, --docroot\t\tsite document root directory (default ./docroot)\n");
-	printf("\t-t, --nthreads\t\tnumber of threads to run with (default 2)\n");
 	printf("\t-v, --version\t\tdisplay verison info\n");
 }
