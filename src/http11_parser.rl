@@ -316,7 +316,7 @@ void mdt_http_field(void *data, const char *field, size_t flen, const char *valu
 	new_entry->key = f;
 	new_entry->value = v;
 
-  mdt_dict_add(new_entry->key, new_entry);
+    mdt_dict_add(new_entry->key, new_entry);
 }
 
 void mdt_request_method(void *data, const char *at, size_t length) {

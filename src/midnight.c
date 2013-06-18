@@ -21,7 +21,9 @@ int main(int argc, char *argv[]){
 	ev_io* watcher_accept = malloc(sizeof(ev_io));
 	ev_signal* watcher_sigint = malloc(sizeof(ev_signal));
 
-	log_info.queue = dispatch_queue_create("com.kja.midnight.logqueue", NULL);
+	log_info.queue = dispatch_queue_create("com.kja.midnight.logqueue", DISPATCH_QUEUE_SERIAL);
+
+	mdt_options_init();
 
 	while( (v = getopt_long(argc, argv, "eqp:a:d:vh", optstruct, NULL)) != -1 ) {
 		switch(v) {
@@ -79,10 +81,6 @@ int main(int argc, char *argv[]){
 
 	TRACE();
 
-	#ifdef DEBUG
-	mdt_log(LOGDEBUG, "entering event loop here");
-	#endif
-
 	ev_run(default_loop, 0);
 }
 
@@ -99,7 +97,7 @@ void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
 		#endif
 	}
 
-	//mdt_dispatch_connection(conn);
+	mdt_dispatch_connection(conn);
 
 	TRACE();
 	#ifdef DEBUG
@@ -114,6 +112,8 @@ void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents)
 	#ifdef DEBUG
 	mdt_log(LOGDEBUG, "process quitting!");
 	#endif
+
+	dispatch_sync(log_info.queue, ^{});
 	exit(0);
 }
 
@@ -127,7 +127,6 @@ void mdt_options_init() {
 	#else
 	log_info.level = LOGINFO;
 	#endif
-
 }
 
 void mdt_usage() {

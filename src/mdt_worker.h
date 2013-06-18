@@ -12,6 +12,7 @@ All rights reserved
 
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <uuid/uuid.h>
 
 /* buffer sizes */
 static const int RESPSIZE =		8 * 1024;
@@ -23,12 +24,24 @@ static const char* POST =			"POST";
 static const char* OPTIONS =		"OPTIONS";
 static const char* HEAD =			"HEAD";
 static const char* PUT =			"PUT";
+static const char* DELETE =			"DELETE";
 
 /* response status types */
 static const char* HTTP11 =			"HTTP/1.1";
 static const char* OK_S =			"200 OK";
+
+static const char* MOVPERM_S =		"301 Moved Permanently";
+static const char* FOUND_S =		"302 Found";
+static const char* SEEOTHER_S =		"303 See Other";
+
+static const char* BADREQ_S =		"400 Bad Request";
 static const char* NF_S =			"404 Not Found";
+static const char* ENTLARGE_S =		"413 Request Entity Too Large";
+static const char* URILONG_S =		"414 Request URI Too Long";
+
 static const char* SRVERR_S =		"500 Internal Server Error";
+static const char* NOTIMP_S =		"501 Not Implimented";
+static const char* SVCUNAV_S =		"503 Service Unavailable";
 
 /* HTTP headers */
 static const char* DATE_H =				"Date:";
@@ -61,7 +74,8 @@ static const char* CHARSET =			"charset=utf-8";
 static const char* CRLF =				"\r\n";
 
 /* header formats */
-static const char* HEADER_FMT =			"%s %s%s";
+static const char* HDR_STR_FMT =		"%s %s%s";
+static const char* HDR_NUM_FMT =		"%s %d%s";
 static const char* CONTENT_FMT =		"%s %s %s%s";
 static const char* DATE_FMT =			"%s %.24s%s";
 
@@ -78,7 +92,7 @@ typedef struct response {
     const char* expires;
     const char* servername;
     const char* connection;
-    char content_length[16];
+    off_t content_length;
     const char* content;
 
     const char* file;
@@ -100,12 +114,13 @@ typedef struct request {
 } request;
 
 typedef struct conn_state {
+	uuid_t uuid;
+
 	response* res;
 
 	http_parser* parser;
 
 	conn_data* conn;
-	conn_data* old_conn;
 
 	int cs;
 } conn_state;
@@ -115,7 +130,9 @@ typedef int (*conn_state_cb)(conn_state* state);
 struct {
 	conn_state_cb parse_init;
 	conn_state_cb parse_exec;
+	conn_state_cb bad_request;
 	conn_state_cb read_request_method;
+	conn_state_cb send_not_implimented;
 	conn_state_cb validate_get;
 	conn_state_cb send_get_response;
 	conn_state_cb send_request_invalid;
@@ -123,12 +140,14 @@ struct {
 	conn_state_cb cleanup;
 } state_actions;
 
-int mdt_state_init(conn_state* state);
+void mdt_state_init(conn_state* state);
 int mdt_state_event(conn_state* state, int event);
 
 int mdt_parse_init(conn_state* state);
 int mdt_parse_exec(conn_state* state);
+int mdt_bad_request(conn_state* state);
 int mdt_read_request_method(conn_state* state);
+int mdt_send_not_implimented(conn_state* state);
 int mdt_validate_get(conn_state* state);
 int mdt_send_get_response(conn_state* state);
 int mdt_send_request_invalid(conn_state* state);

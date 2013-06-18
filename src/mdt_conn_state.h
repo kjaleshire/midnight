@@ -21,7 +21,8 @@ typedef enum StateEvent {
 	GET_NOT_VALID = 17,
 	GET_NOT_FOUND = 18,
 	CLOSE = 19,
-	DONE = 20
+	DONE = 20,
+	NOT_IMP = 21
 } StateEvent;
 
 #endif /* mdt_conn_state_h */

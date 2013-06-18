@@ -20,6 +20,7 @@ All rights reserved
 #include <string.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 #include <dispatch/dispatch.h>	// grand central dispatch
 #include <ev.h>					// libev event handler
 
@@ -76,7 +77,7 @@ struct {
 } options_info;
 
 /* log+fatal macros */
-#define LOG_FD stdout
+#define LOG_FD stderr
 #ifdef DEBUG
 #define mdt_log(e, m, ...)	\
 		do {	\
@@ -86,9 +87,9 @@ struct {
 				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMESTAMP_FMT, log_info.current_time);	\
 				dispatch_async(log_info.queue, ^{	\
 					fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
+					fprintf(LOG_FD, "%x:\t", (unsigned int) pthread_self());	\
 					fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 					fprintf(LOG_FD, "\n");	\
-					fflush(stdout);	\
 				});	\
 			}	\
 		} while(0)
@@ -99,7 +100,6 @@ struct {
 				dispatch_async(log_info.queue, ^{	\
 					fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 					fprintf(LOG_FD, "\n");	\
-					fflush(stdout);	\
 				});	\
 			}	\
 		} while(0)
@@ -120,10 +120,10 @@ struct {
 				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMESTAMP_FMT, log_info.current_time);	\
 				dispatch_sync(log_info.queue, ^{	\
 			        fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
+			        fprintf(LOG_FD, "%x:\t> %s:%d:%s:\tfatal: \"", (unsigned int) pthread_self(), __FILE__, __LINE__, __FUNCTION__);	\
 			        fprintf(LOG_FD, ":\t> %s:%d:%s:\tfatal: \"", __FILE__, __LINE__, __FUNCTION__);	\
 			        fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 			        fprintf(LOG_FD, "\"\n");	\
-			        fflush(stdout);	\
 				});	\
 				exit((e));	\
 			}	\
