@@ -182,13 +182,7 @@ int mdt_bad_request(conn_state* state) {
 	res->connection = CONN_CLOSE;
 	res->content_type = MIME_HTML;
 	res->charset = CHARSET;
-	res->content =  "<html>\n                                                             \
-						<body>\n                                                          \
-							<p style=\"font-weight: bold; font-size: 14px; text-align: center;\">\n   \
-							400 Bad Request\n                                   \
-							</p>\n                                                        \
-						</body>\n                                                         \
-					</html>";
+	res->content =  RESPONSE_400;
 
 	mdt_res_write(state->conn, res);
 
@@ -202,8 +196,9 @@ int mdt_read_request_method(conn_state* state) {
 
 	if(strcmp(req->request_method, GET) == 0) {
 		return GET_REQUEST;
+	} else if(strcmp(req->request_method, HEAD) == 0) {
+		return NOT_IMP;
 	} else if(strcmp(req->request_method, PUT) == 0 ||
-		   	  strcmp(req->request_method, HEAD) == 0 ||
 		   	  strcmp(req->request_method, POST) == 0 ||
 		   	  strcmp(req->request_method, DELETE) == 0 ||
 		   	  strcmp(req->request_method, OPTIONS) == 0) {
@@ -382,7 +377,6 @@ void mdt_req_init(request* req) {
 	req->query_string = NULL;
 	req->http_version = NULL;
 }
-
 
 void mdt_res_init(response* res) {
 	res->buffer_index = 0;

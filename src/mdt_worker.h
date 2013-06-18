@@ -82,6 +82,7 @@ static const char* DATE_FMT =			"%s %.24s%s";
 static const char* RESPONSE_404 = "<html><body><p style=\"font-weight: bold; font-size: 18px; text-align: center;\">404 File Not Found</p></body></html>";
 static const char* RESPONSE_500 = "<html><body><p style=\"font-weight: bold; font-size: 18px; text-align: center;\">500 Internal Server Error</p></body></html>";
 static const char* RESPONSE_501 = "<html><body><p style=\"font-weight: bold; font-size: 18px; text-align: center;\">501 Not Implimented</p></body></html>";
+static const char* RESPONSE_400 = "<html><body><p style=\"font-weight: bold; font-size: 18px; text-align: center;\">400 Bad Request</p></body></html>";
 
 typedef struct response {
     char buffer[RESPSIZE];
