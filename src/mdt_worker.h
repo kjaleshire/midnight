@@ -15,8 +15,8 @@ All rights reserved
 #include <uuid/uuid.h>
 
 /* buffer sizes */
-static const int RESPSIZE =		8 * 1024;
-static const int REQSIZE =		8 * 1024;
+static const int RESPSIZE =			8 * 1024;
+static const int REQSIZE =			8 * 1024;
 
 /* request types */
 static const char* GET =			"GET";
@@ -76,8 +76,12 @@ static const char* CRLF =				"\r\n";
 /* header formats */
 static const char* HDR_STR_FMT =		"%s %s%s";
 static const char* HDR_NUM_FMT =		"%s %d%s";
-static const char* CONTENT_FMT =		"%s %s %s%s";
+static const char* CONTENT_CHAR_FMT =		"%s %s %s%s";
 static const char* DATE_FMT =			"%s %.24s%s";
+
+static const char* RESPONSE_404 = "<html><body><p style=\"font-weight: bold; font-size: 18px; text-align: center;\">404 File Not Found</p></body></html>";
+static const char* RESPONSE_500 = "<html><body><p style=\"font-weight: bold; font-size: 18px; text-align: center;\">500 Internal Server Error</p></body></html>";
+static const char* RESPONSE_501 = "<html><body><p style=\"font-weight: bold; font-size: 18px; text-align: center;\">501 Not Implimented</p></body></html>";
 
 typedef struct response {
     char buffer[RESPSIZE];

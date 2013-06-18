@@ -229,13 +229,7 @@ int mdt_send_not_implimented(conn_state* state) {
 	res->connection = CONN_CLOSE;
 	res->content_type = MIME_HTML;
 	res->charset = CHARSET;
-	res->content =  "<html>\n                                                             \
-						<body>\n                                                          \
-							<p style=\"font-weight: bold; font-size: 14px; text-align: center;\">\n   \
-							501 Not Implimented\n                                   \
-							</p>\n                                                        \
-						</body>\n                                                         \
-					</html>";
+	res->content = RESPONSE_501;
 
 	mdt_res_write(state->conn, res);
 
@@ -258,13 +252,7 @@ int mdt_send_request_invalid(conn_state* state) {
 	res->connection = CONN_CLOSE;
 	res->content_type = MIME_HTML;
 	res->charset = CHARSET;
-	res->content =  "<html>\n                                                             \
-						<body>\n                                                          \
-							<p style=\"font-weight: bold; font-size: 14px; text-align: center;\">\n   \
-							500 Internal Server Error\n                                   \
-							</p>\n                                                        \
-						</body>\n                                                         \
-					</html>";
+	res->content = RESPONSE_500;
 
 	mdt_res_write(state->conn, res);
 
@@ -363,13 +351,7 @@ int mdt_send_404_response(conn_state* state) {
 	res->content_type = MIME_HTML;
 	res->charset = CHARSET;
 	res->expires = EXPIRES_NEVER;
-	res->content = "<html>\n                                                            \
-						<body>\n                                                        \
-							<p style=\"font-weight: bold; font-size: 18px; text-align: center;\">\n         \
-							404 File Not Found\n                                        \
-							</p>\n                                                      \
-						</body>\n                                                       \
-					</html>";
+	res->content = RESPONSE_404;
 
 	mdt_res_write(state->conn, res);
 
@@ -453,7 +435,7 @@ int mdt_res_write(conn_data* conn, response* res) {
 	mdt_res_buff(res, HDR_STR_FMT, res->http_version, res->status, CRLF);
 
 	if(res->content_type != NULL && res->charset != NULL) {
-		mdt_res_buff(res, CONTENT_FMT, CONTENT_H, res->content_type, res->charset, CRLF);
+		mdt_res_buff(res, CONTENT_CHAR_FMT, CONTENT_H, res->content_type, res->charset, CRLF);
 	}
 	if(res->current_time != NULL) {
 		mdt_res_buff(res, DATE_FMT, DATE_H, res->current_time, CRLF);
