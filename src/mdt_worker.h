@@ -145,6 +145,8 @@ struct {
 	conn_state_cb cleanup;
 } state_actions;
 
+void mdt_worker(thread_info* opts);
+
 void mdt_state_init(conn_state* state);
 int mdt_state_event(conn_state* state, int event);
 

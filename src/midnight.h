@@ -11,7 +11,6 @@ All rights reserved
 #define midnight_h
 
 #include <getopt.h>
-#include <sys/socket.h>
 
 static int listen_sd;
 
@@ -21,6 +20,7 @@ static struct option optstruct[] = {
 	{ "port", required_argument, NULL, 'p'},
 	{ "address", required_argument, NULL, 'a'},
 	{ "docroot", required_argument, NULL, 'd'},
+	{ "threads", required_argument, NULL, 't'},
 	{ "version", no_argument, NULL, 'v'}
 };
 

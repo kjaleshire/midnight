@@ -11,23 +11,25 @@ All rights reserved
 #include <midnight.h>
 
 void mdt_set_state_actions();
-void mdt_dispatch_connection(conn_data*);
+void mdt_worker(thread_info* opts);
+
+
+thread_info *threads;
 
 int main(int argc, char *argv[]){
 	int v;
 	struct sockaddr_in servaddr;
 
 	struct ev_loop* default_loop;
-	ev_io* watcher_accept = malloc(sizeof(ev_io));
 	ev_signal* watcher_sigint = malloc(sizeof(ev_signal));
 
-	log_info.queue = dispatch_queue_create("com.kja.midnight.logqueue", DISPATCH_QUEUE_SERIAL);
+	mdt_log_init();
 
 	mdt_options_init();
 
 	log_info.level = -1;
 
-	while( (v = getopt_long(argc, argv, "e:p:a:d:vh", optstruct, NULL)) != -1 ) {
+	while( (v = getopt_long(argc, argv, "e:p:a:d:t:vh", optstruct, NULL)) != -1 ) {
 		switch(v) {
 			case 'e':
 				log_info.level = strtol(optarg, NULL, 0);
@@ -40,6 +42,9 @@ int main(int argc, char *argv[]){
 				break;
 			case 'p':
 				options_info.port = htons(strtol(optarg, NULL, 0));
+				break;
+			case 't':
+				options_info.n_threads = strtol(optarg, NULL, 0);
 				break;
 			case 'v':
 				mdt_version();
@@ -78,38 +83,23 @@ int main(int argc, char *argv[]){
 	}
 	TRACE();
 
+	threads = calloc(options_info.n_threads, sizeof(thread_info));
+	for(v = 0; v < options_info.n_threads; v++) {
+		threads[v].listen_sd = listen_sd;
+		threads[v].exec_continue = 1;
+		if(	pthread_create(&threads[v].thread_id, NULL, (void *(*)(void *)) mdt_worker, &threads[v]) < 0) {
+			mdt_fatal(ERRSYS, "thread pool spawn fail");
+		}
+	}
+
 	default_loop = EV_DEFAULT;
 
 	ev_signal_init(watcher_sigint, mdt_sigint_cb, SIGINT);
 	ev_signal_start(default_loop, watcher_sigint);
 
-	ev_io_init(watcher_accept, mdt_accept_cb, listen_sd, EV_READ);
-	ev_io_start(default_loop, watcher_accept);
-
 	TRACE();
 
 	ev_run(default_loop, 0);
-}
-
-void mdt_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
-	TRACE();
-	socklen_t sock_size = sizeof(struct sockaddr_in);
-	conn_data *conn = malloc(sizeof(conn_data));
-
-	if( (conn->open_sd = accept(listen_sd, (struct sockaddr *) &conn->conn_info, &sock_size)) < 0) {
-		mdt_fatal(ERRSYS, "accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));
-	} else {
-		#ifdef DEBUG
-		mdt_log(LOGDEBUG, "accepted client %s", inet_ntoa(conn->conn_info.sin_addr));
-		#endif
-	}
-
-	mdt_dispatch_connection(conn);
-
-	TRACE();
-	#ifdef DEBUG
-	mdt_log(LOGDEBUG, "enqueued client %s", inet_ntoa(conn->conn_info.sin_addr));
-	#endif
 }
 
 void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
@@ -119,12 +109,11 @@ void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents)
 	#ifdef DEBUG
 	mdt_log(LOGDEBUG, "process quitting!");
 	#endif
-
-	dispatch_sync(log_info.queue, ^{});
 	exit(0);
 }
 
 void mdt_options_init() {
+	options_info.n_threads = 2;
 	options_info.address = htonl(INADDR_ANY);
 	options_info.port = htons(DEFAULT_PORT);
 	options_info.docroot = DEFAULT_DOCROOT;
@@ -139,6 +128,7 @@ void mdt_usage() {
 	printf("\t-e, --verbosity 0-3\t\tset verbosity level 0-3 (silent->debugging info)\n");
 	printf("\t-p, --port portnumber\t\tport to listen on (default 8080)\n");
 	printf("\t-a, --address IP-address\t\taddress to bind to (default all)\n");
+	printf("\t-t, --threads threadnumber\t\tnumber of threads to use (default 2)\n");
 	printf("\t-d, --docroot document-root\tsite document root directory (default ./docroot)\n");
 	printf("\t-v, --version\t\tdisplay verison info\n");
 }

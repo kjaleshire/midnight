@@ -20,8 +20,8 @@ All rights reserved
 #include <string.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
 #include <pthread.h>
-#include <dispatch/dispatch.h>	// grand central dispatch
 #include <ev.h>					// libev event handler
 
 /* app meta constants */
@@ -59,23 +59,39 @@ typedef struct conn_data {
     struct sockaddr_in conn_info;
 } conn_data;
 
-struct {
-	dispatch_queue_t queue;
+typedef struct thread_info {
+	pthread_t thread_id;
+	int listen_sd;
+	int exec_continue;
+} thread_info;
 
+struct {
 	int level;
 	char timestamp[TIMESTAMP_SIZE];
 	time_t ticks;
 	struct tm* current_time;
+
 	pthread_mutex_t mtx_term;
 } log_info;
 
 struct {
+	int n_threads;
 	char* docroot;
 	uint16_t port;
 	uint32_t address;
 } options_info;
 
 /* log+fatal macros */
+#define mdt_log_init()	\
+		do {	\
+			pthread_mutexattr_t mtx_attr;	\
+    		if( pthread_mutexattr_init(&mtx_attr) != 0 ||	\
+	        pthread_mutexattr_settype(&mtx_attr, PTHREAD_MUTEX_RECURSIVE) != 0 ||	\
+	        pthread_mutex_init(&log_info.mtx_term, &mtx_attr) != 0 ) {	\
+	            printf("System error: unable to initialize terminal mutex");	\
+	            exit(ERRSYS);	\
+        	}	\
+		} while(0)
 #define LOG_FD stderr
 #ifdef DEBUG
 #define mdt_log(e, m, ...)	\
@@ -84,22 +100,22 @@ struct {
 				log_info.ticks = time(NULL);	\
 				log_info.current_time = localtime(&log_info.ticks);	\
 				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMESTAMP_FMT, log_info.current_time);	\
-				dispatch_async(log_info.queue, ^{	\
+				pthread_mutex_lock(&log_info.mtx_term);	\
 					fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
 					fprintf(LOG_FD, "%x:\t", (unsigned int) pthread_self());	\
 					fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 					fprintf(LOG_FD, "\n");	\
-				});	\
+				pthread_mutex_unlock(&log_info.mtx_term);	\
 			}	\
 		} while(0)
 #else
 #define mdt_log(e, m, ...)	\
 		do {	\
 			if((e) <= log_info.level) {	\
-				dispatch_async(log_info.queue, ^{	\
+				pthread_mutex_lock(&log_info.mtx_term);	\
 					fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 					fprintf(LOG_FD, "\n");	\
-				});	\
+				pthread_mutex_unlock(&log_info.mtx_term);	\
 			}	\
 		} while(0)
 #endif
@@ -117,13 +133,13 @@ struct {
 				log_info.ticks = time(NULL);	\
 				log_info.current_time = localtime(&log_info.ticks);	\
 				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMESTAMP_FMT, log_info.current_time);	\
-				dispatch_sync(log_info.queue, ^{	\
+				pthread_mutex_lock(&log_info.mtx_term);	\
 			        fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
 			        fprintf(LOG_FD, "%x:\t> %s:%d:%s:\tfatal: \"", (unsigned int) pthread_self(), __FILE__, __LINE__, __FUNCTION__);	\
 			        fprintf(LOG_FD, ":\t> %s:%d:%s:\tfatal: \"", __FILE__, __LINE__, __FUNCTION__);	\
 			        fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 			        fprintf(LOG_FD, "\"\n");	\
-				});	\
+				pthread_mutex_unlock(&log_info.mtx_term);	\
 				exit((e));	\
 			}	\
 		} while(0)

@@ -74,21 +74,31 @@ All rights reserved
 
 %% write data;
 
-void mdt_dispatch_connection(conn_data* conn) {
-	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-		int next;
-		conn_state *state;
+void mdt_worker(thread_info *opts) {
+	int next;
+	socklen_t sock_size = sizeof(struct sockaddr_in);
+	conn_state *state;
 
-		#ifdef DEBUG
-		mdt_log(LOGDEBUG, "new connection block enqueued");
-		#endif
+	#ifdef DEBUG
+	mdt_log(LOGDEBUG, "new thread started");
+	#endif
 
-		state = malloc(sizeof(conn_state));
+	state = malloc(sizeof(conn_state));
 
-		uuid_generate(state->uuid);
+	uuid_generate(state->uuid);
 
+	while(opts->exec_continue){
 		TRACE();
-		state->conn = conn;
+
+		state->conn = malloc(sizeof(conn_data));
+
+		if( (state->conn->open_sd = accept(opts->listen_sd, (struct sockaddr *) &(state->conn->conn_info), &sock_size)) < 0) {
+			mdt_fatal(ERRSYS, "accept fail from client %s", inet_ntoa(state->conn->conn_info.sin_addr));
+		} else {
+#ifdef DEBUG
+			mdt_log(LOGDEBUG, "accepted client %s", inet_ntoa(state->conn->conn_info.sin_addr));
+#endif
+		}
 
 		next = OPEN;
 
@@ -104,7 +114,11 @@ void mdt_dispatch_connection(conn_data* conn) {
 		#ifdef DEBUG
 		mdt_log(LOGDEBUG, "finished handling connection");
 		#endif
-	});
+	}
+
+	#ifdef DEBUG
+	mdt_log(LOGDEBUG, "thread quitting");
+	#endif
 }
 
 int mdt_state_event(conn_state* state, int event) {
