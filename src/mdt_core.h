@@ -20,7 +20,6 @@ All rights reserved
 #include <string.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <pthread.h>
 #include <dispatch/dispatch.h>	// grand central dispatch
 #include <ev.h>					// libev event handler
 
@@ -28,8 +27,8 @@ All rights reserved
 #define APP_NAME		"midnight"
 #define APP_DESC		"A simple threaded+evented HTTP server"
 #define MAJOR_V			0
-#define MINOR_V			1
-#define PATCH_V			3
+#define MINOR_V			2
+#define PATCH_V			0
 #define PRERELEASE_V	""
 
 /* app-wide constants */
@@ -66,7 +65,6 @@ struct {
 	char timestamp[TIMESTAMP_SIZE];
 	time_t ticks;
 	struct tm* current_time;
-	pthread_mutex_t mtx_term;
 } log_info;
 
 struct {
@@ -86,7 +84,7 @@ struct {
 				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMESTAMP_FMT, log_info.current_time);	\
 				dispatch_async(log_info.queue, ^{	\
 					fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
-					fprintf(LOG_FD, "%x:\t", (unsigned int) pthread_self());	\
+					fprintf(LOG_FD, "%x:\t", (unsigned int) 0xabad1dea);	\
 					fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 					fprintf(LOG_FD, "\n");	\
 				});	\
@@ -119,7 +117,7 @@ struct {
 				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMESTAMP_FMT, log_info.current_time);	\
 				dispatch_sync(log_info.queue, ^{	\
 			        fprintf(LOG_FD, "%s  ", log_info.timestamp);	\
-			        fprintf(LOG_FD, "%x:\t> %s:%d:%s:\tfatal: \"", (unsigned int) pthread_self(), __FILE__, __LINE__, __FUNCTION__);	\
+			        fprintf(LOG_FD, "%x:\t> %s:%d:%s:\tfatal: \"", (unsigned int) 0xdeadbeef, __FILE__, __LINE__, __FUNCTION__);	\
 			        fprintf(LOG_FD, ":\t> %s:%d:%s:\tfatal: \"", __FILE__, __LINE__, __FUNCTION__);	\
 			        fprintf(LOG_FD, (m), ##__VA_ARGS__);	\
 			        fprintf(LOG_FD, "\"\n");	\
