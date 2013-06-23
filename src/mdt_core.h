@@ -25,7 +25,7 @@ All rights reserved
 
 /* app meta constants */
 #define APP_NAME		"midnight"
-#define APP_DESC		"A simple threaded+evented HTTP server"
+#define APP_DESC		"A simple concurrent+evented HTTP server"
 #define MAJOR_V			0
 #define MINOR_V			2
 #define PATCH_V			0
