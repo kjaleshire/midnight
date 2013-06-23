@@ -44,7 +44,6 @@ All rights reserved
 /* logging levels */
 enum {
 	LOGNONE,
-	LOGFATAL,
 	LOGERR,
 	LOGINFO,
 	LOGDEBUG
@@ -114,7 +113,7 @@ struct {
 /* spoilers: everyone dies */
 #define mdt_fatal(e, m, ...)	\
 		do {	\
-			if(LOGFATAL <= log_info.level) {	\
+			if(LOGERR <= log_info.level) {	\
 				log_info.ticks = time(NULL);	\
 				log_info.current_time = localtime(&log_info.ticks);	\
 				strftime(log_info.timestamp, TIMESTAMP_SIZE, TIMESTAMP_FMT, log_info.current_time);	\

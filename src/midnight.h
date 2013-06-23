@@ -17,8 +17,7 @@ static int listen_sd;
 
 static struct option optstruct[] = {
 	{ "help", no_argument, NULL, 'h'},
-	{ "error", no_argument, NULL, 'e'},
-	{ "quiet", no_argument, NULL, 'q'},
+	{ "verbosity", required_argument, NULL, 'e'},
 	{ "port", required_argument, NULL, 'p'},
 	{ "address", required_argument, NULL, 'a'},
 	{ "docroot", required_argument, NULL, 'd'},

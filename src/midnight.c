@@ -25,13 +25,12 @@ int main(int argc, char *argv[]){
 
 	mdt_options_init();
 
-	while( (v = getopt_long(argc, argv, "eqp:a:d:vh", optstruct, NULL)) != -1 ) {
+	log_info.level = -1;
+
+	while( (v = getopt_long(argc, argv, "e:p:a:d:vh", optstruct, NULL)) != -1 ) {
 		switch(v) {
 			case 'e':
-				log_info.level = LOGERR;
-				break;
-			case 'q':
-				log_info.level = LOGNONE;
+				log_info.level = strtol(optarg, NULL, 0);
 				break;
 			case 'd':
 				options_info.docroot = optarg;
@@ -51,6 +50,14 @@ int main(int argc, char *argv[]){
 				mdt_usage();
 				exit(0);
 		}
+	}
+
+	if(log_info.level == -1) {
+		#ifdef DEBUG
+		log_info.level = LOGDEBUG;
+		#else
+		log_info.level = LOGINFO;
+		#endif
 	}
 
 	mdt_set_state_actions();
@@ -121,24 +128,17 @@ void mdt_options_init() {
 	options_info.address = htonl(INADDR_ANY);
 	options_info.port = htons(DEFAULT_PORT);
 	options_info.docroot = DEFAULT_DOCROOT;
-
-	#ifdef DEBUG
-	log_info.level = LOGDEBUG;
-	#else
-	log_info.level = LOGINFO;
-	#endif
 }
 
 void mdt_usage() {
 	printf("\n");
 	printf("  Usage:\n");
-	printf("\tmidnight [-hevq] [-a listenaddress] [-p listenport] [-d docroot]\n");
+	printf("\tmidnight [-hv] [-e verbosity] [-a listenaddress] [-p listenport] [-d docroot]\n");
 	printf("  Options:\n");
 	printf("\t-h, --help\t\tthis help\n");
-	printf("\t-e, --error\t\terror-only logging\n");
-	printf("\t-q, --quiet\t\tno logging\n");
-	printf("\t-p, --port\t\tport to listen on (default 8080)\n");
-	printf("\t-a, --address\t\taddress to bind to (default all)\n");
-	printf("\t-d, --docroot\t\tsite document root directory (default ./docroot)\n");
+	printf("\t-e, --verbosity 0-3\t\tset verbosity level 0-3 (silent->debugging info)\n");
+	printf("\t-p, --port portnumber\t\tport to listen on (default 8080)\n");
+	printf("\t-a, --address IP-address\t\taddress to bind to (default all)\n");
+	printf("\t-d, --docroot document-root\tsite document root directory (default ./docroot)\n");
 	printf("\t-v, --version\t\tdisplay verison info\n");
 }
