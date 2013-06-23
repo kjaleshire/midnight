@@ -27,3 +27,4 @@ http11_parser.c
 mdt_worker.c
 site*
 docroot
+*.plist

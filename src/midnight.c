@@ -8,11 +8,12 @@ All rights reserved
 */
 
 #include <mdt_core.h>
-#include <mdt_hash.h>
-#include <http11_parser.h>
-#include <mdt_worker.h>
+#include <midnight.h>
 
-int listen_sd;
+void mdt_set_state_actions();
+void mdt_worker(thread_info* opts);
+
+
 thread_info *threads;
 
 int main(int argc, char *argv[]){
@@ -20,22 +21,18 @@ int main(int argc, char *argv[]){
 	struct sockaddr_in servaddr;
 
 	struct ev_loop* default_loop;
-	ev_io* watcher_accept = malloc(sizeof(ev_io));
 	ev_signal* watcher_sigint = malloc(sizeof(ev_signal));
 
-	md_options_init();
+	mdt_log_init();
 
-	#ifdef DEBUG
-	log_info.log_level = LOGDEBUG;
-	#endif
+	mdt_options_init();
 
-	while( (v = getopt_long(argc, argv, "eqp:a:d:t:vh", optstruct, NULL)) != -1 ) {
+	log_info.level = -1;
+
+	while( (v = getopt_long(argc, argv, "e:p:a:d:t:vh", optstruct, NULL)) != -1 ) {
 		switch(v) {
 			case 'e':
-				log_info.log_level = LOGERR;
-				break;
-			case 'q':
-				log_info.log_level = LOGNONE;
+				log_info.level = strtol(optarg, NULL, 0);
 				break;
 			case 'd':
 				options_info.docroot = optarg;
@@ -50,17 +47,25 @@ int main(int argc, char *argv[]){
 				options_info.n_threads = strtol(optarg, NULL, 0);
 				break;
 			case 'v':
-				md_version();
+				mdt_version();
 				exit(0);
 			case 'h':
 			default:
-				md_version();
-				md_usage();
+				mdt_version();
+				mdt_usage();
 				exit(0);
 		}
 	}
 
-	md_set_state_actions(&state_actions);
+	if(log_info.level == -1) {
+		#ifdef DEBUG
+		log_info.level = LOGDEBUG;
+		#else
+		log_info.level = LOGINFO;
+		#endif
+	}
+
+	mdt_set_state_actions();
 
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = options_info.address;
@@ -68,120 +73,62 @@ int main(int argc, char *argv[]){
 
 	v = 1;
 	if( (listen_sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0 ||
-	#ifdef DEBUG
-		setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(v)) < 0 ||	// so we can quickly reuse port
-	#endif
-		bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
-		listen(listen_sd, LISTENQ) < 0
-	) {
-		md_fatal("socket create & bind fail on %s",
-			servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : inet_ntoa(servaddr.sin_addr));
+#ifdef DEBUG
+	setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &v, sizeof(v)) < 0 ||	// so we can quickly reuse port
+#endif
+	bind(listen_sd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0 ||
+	listen(listen_sd, LISTENQ) < 0 ) {
+		mdt_fatal(ERRSYS, "socket create & bind fail on %s",
+		servaddr.sin_addr.s_addr == htonl(INADDR_ANY) ? "INADDR_ANY" : inet_ntoa(servaddr.sin_addr));
 	}
-	else {
-		TRACE();
-	}
-
-	if( (queue_info.sem_q_empty = sem_open("empty", O_CREAT, 0644, options_info.n_threads * MAXQUEUESIZE)) == SEM_FAILED ||
-		(queue_info.sem_q_full = sem_open("full", O_CREAT, 0644, 0)) == SEM_FAILED ||
-		(sem_unlink("empty") != 0 && errno != ENOENT) ||
-		(sem_unlink("full") != 0 && errno != ENOENT) )
-		 {
-		 	char *s = strerror(errno);
-			md_fatal("queue semaphore create fail: %s", s);
-	}
-
-	if( pthread_mutex_init(&queue_info.mtx_conn_queue, NULL) != 0 ) {
-		md_fatal("queue mutex create fail");
-	}
-
-	STAILQ_INIT(&(queue_info.conn_queue));
+	TRACE();
 
 	threads = calloc(options_info.n_threads, sizeof(thread_info));
 	for(v = 0; v < options_info.n_threads; v++) {
-		threads[v].thread_continue = 0;
-		if(	pthread_create(&(threads[v].thread_id), NULL, (void *(*)(void *)) md_worker, &threads[v]) < 0) {
-			md_fatal("thread pool spawn fail");
+		threads[v].listen_sd = listen_sd;
+		threads[v].exec_continue = 1;
+		if(	pthread_create(&threads[v].thread_id, NULL, (void *(*)(void *)) mdt_worker, &threads[v]) < 0) {
+			mdt_fatal(ERRSYS, "thread pool spawn fail");
 		}
 	}
 
 	default_loop = EV_DEFAULT;
 
-	ev_signal_init(watcher_sigint, md_sigint_cb, SIGINT);
+	ev_signal_init(watcher_sigint, mdt_sigint_cb, SIGINT);
 	ev_signal_start(default_loop, watcher_sigint);
-
-	ev_io_init(watcher_accept, md_accept_cb, listen_sd, EV_READ);
-	ev_io_start(default_loop, watcher_accept);
 
 	TRACE();
 
 	ev_run(default_loop, 0);
 }
 
-void md_accept_cb(struct ev_loop *loop, ev_io* watcher_accept, int revents) {
-	TRACE();
-	socklen_t sock_size = sizeof(struct sockaddr_in);
-	conn_data *conn = malloc(sizeof(conn_data));
-
-	if( (conn->open_sd = accept(listen_sd, (struct sockaddr *) &(conn->conn_info), &sock_size)) < 0) {
-		md_fatal("accept fail from client %s", inet_ntoa(conn->conn_info.sin_addr));
-	} else {
-		#ifdef DEBUG
-		mdt_log(LOGDEBUG, "accepted client %s", inet_ntoa(conn->conn_info.sin_addr));
-		#endif
-	}
-
-	sem_wait(queue_info.sem_q_empty);
-	pthread_mutex_lock(&queue_info.mtx_conn_queue);
-	STAILQ_INSERT_TAIL(&queue_info.conn_queue, conn, q_next);
-	pthread_mutex_unlock(&queue_info.mtx_conn_queue);
-	sem_post(queue_info.sem_q_full);
-
-	TRACE();
-	#ifdef DEBUG
-	mdt_log(LOGDEBUG, "enqueued client %s", inet_ntoa(conn->conn_info.sin_addr));
-	#endif
-}
-
-void md_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
+void mdt_sigint_cb(struct ev_loop *loop, ev_signal* watcher_sigint, int revents) {
 	TRACE();
 	close(listen_sd);
-	conn_data no_conn[options_info.n_threads];
 
-	for(int i = 0; i < options_info.n_threads; i++) {
-		no_conn[i].open_sd = -1;
-		sem_wait(queue_info.sem_q_empty);
-		pthread_mutex_lock(&queue_info.mtx_conn_queue);
-		STAILQ_INSERT_TAIL(&queue_info.conn_queue, &no_conn[i], q_next);
-		pthread_mutex_unlock(&queue_info.mtx_conn_queue);
-		sem_post(queue_info.sem_q_full);
-	}
-
-	if( sem_close(queue_info.sem_q_full) != 0 ||
-		sem_close(queue_info.sem_q_empty) != 0 ) {
-		char *s = strerror(errno);
-		mdt_log(LOGDEBUG, "queue semaphore close fail: %s", s);
-	}
-
-	for(int i = 0; i < options_info.n_threads; i++) {
-		pthread_join(threads[i].thread_id, NULL);
-	}
 	#ifdef DEBUG
 	mdt_log(LOGDEBUG, "process quitting!");
 	#endif
 	exit(0);
 }
 
-void md_usage() {
+void mdt_options_init() {
+	options_info.n_threads = 2;
+	options_info.address = htonl(INADDR_ANY);
+	options_info.port = htons(DEFAULT_PORT);
+	options_info.docroot = DEFAULT_DOCROOT;
+}
+
+void mdt_usage() {
 	printf("\n");
 	printf("  Usage:\n");
-	printf("\tmidnight [-hevq] [-t threadnum] [-a listenaddress] [-p listenport] [-d docroot]\n");
+	printf("\tmidnight [-hv] [-e verbosity] [-a listenaddress] [-p listenport] [-d docroot]\n");
 	printf("  Options:\n");
 	printf("\t-h, --help\t\tthis help\n");
-	printf("\t-e, --error\t\terror-only logging\n");
-	printf("\t-q, --quiet\t\tno logging\n");
-	printf("\t-p, --port\t\tport to listen on (default 8080)\n");
-	printf("\t-a, --address\t\taddress to bind to (default all)\n");
-	printf("\t-d, --docroot\t\tsite document root directory (default ./docroot)\n");
-	printf("\t-t, --nthreads\t\tnumber of threads to run with (default 2)\n");
+	printf("\t-e, --verbosity 0-3\t\tset verbosity level 0-3 (silent->debugging info)\n");
+	printf("\t-p, --port portnumber\t\tport to listen on (default 8080)\n");
+	printf("\t-a, --address IP-address\t\taddress to bind to (default all)\n");
+	printf("\t-t, --threads threadnumber\t\tnumber of threads to use (default 2)\n");
+	printf("\t-d, --docroot document-root\tsite document root directory (default ./docroot)\n");
 	printf("\t-v, --version\t\tdisplay verison info\n");
 }

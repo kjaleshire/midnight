@@ -238,14 +238,14 @@ void http_parser_init(http_parser *parser)  {
     parser->xml_sent = 0;
     parser->json_sent = 0;
 
-	parser->http_field = md_http_field;
-	parser->request_method = md_request_method;
-	parser->request_uri = md_request_uri;
-	parser->fragment = md_fragment;
-	parser->request_path = md_request_path;
-	parser->query_string = md_query_string;
-	parser->http_version = md_http_version;
-	parser->header_done = md_header_done;
+	parser->http_field = mdt_http_field;
+	parser->request_method = mdt_request_method;
+	parser->request_uri = mdt_request_uri;
+	parser->fragment = mdt_fragment;
+	parser->request_path = mdt_request_path;
+	parser->query_string = mdt_query_string;
+	parser->http_version = mdt_http_version;
+	parser->header_done = mdt_header_done;
 }
 
 /** exec **/
@@ -302,7 +302,7 @@ int http_parser_is_finished(http_parser *parser) {
 }
 
 /* header parser function */
-void md_http_field(void *data, const char *field, size_t flen, const char *value, size_t vlen) {
+void mdt_http_field(void *data, const char *field, size_t flen, const char *value, size_t vlen) {
 	http_header *new_entry = malloc(sizeof(http_header));
 
 	char *f = calloc(flen + 1, sizeof(char));
@@ -316,10 +316,10 @@ void md_http_field(void *data, const char *field, size_t flen, const char *value
 	new_entry->key = f;
 	new_entry->value = v;
 
-  md_dict_add(new_entry->key, new_entry);
+    mdt_dict_add(new_entry->key, new_entry);
 }
 
-void md_request_method(void *data, const char *at, size_t length) {
+void mdt_request_method(void *data, const char *at, size_t length) {
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
 	v[length] = '\0';
@@ -327,7 +327,7 @@ void md_request_method(void *data, const char *at, size_t length) {
 	((request *) data)->request_method = v;
 }
 
-void md_request_uri(void *data, const char *at, size_t length) {
+void mdt_request_uri(void *data, const char *at, size_t length) {
 
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
@@ -336,7 +336,7 @@ void md_request_uri(void *data, const char *at, size_t length) {
 	((request *) data)->request_uri = v;
 }
 
-void md_fragment(void *data, const char *at, size_t length) {
+void mdt_fragment(void *data, const char *at, size_t length) {
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
 	v[length] = '\0';
@@ -344,7 +344,7 @@ void md_fragment(void *data, const char *at, size_t length) {
 	((request *) data)->fragment = v;
 }
 
-void md_request_path(void *data, const char *at, size_t length) {
+void mdt_request_path(void *data, const char *at, size_t length) {
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
 	v[length] = '\0';
@@ -352,7 +352,7 @@ void md_request_path(void *data, const char *at, size_t length) {
 	((request *) data)->request_path = v;
 }
 
-void md_query_string(void *data, const char *at, size_t length) {
+void mdt_query_string(void *data, const char *at, size_t length) {
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
 	v[length] = '\0';
@@ -360,7 +360,7 @@ void md_query_string(void *data, const char *at, size_t length) {
 	((request *) data)->query_string = v;
 }
 
-void md_http_version(void *data, const char *at, size_t length) {
+void mdt_http_version(void *data, const char *at, size_t length) {
 	char *v = calloc(length + 1, sizeof(char));
 	strncpy(v, at, length);
 	v[length] = '\0';
@@ -368,6 +368,6 @@ void md_http_version(void *data, const char *at, size_t length) {
 	((request *) data)->http_version = v;
 }
 
-void md_header_done(void *data, const char *at, size_t length) {
+void mdt_header_done(void *data, const char *at, size_t length) {
 	TRACE();
 }

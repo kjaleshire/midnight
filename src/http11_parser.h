@@ -43,13 +43,13 @@ int http_parser_is_finished(http_parser *parser);
 
 #define http_parser_nread(parser) (parser)->nread
 
-void md_http_field(void *data, const char *field, size_t flen, const char *value, size_t vlen);
-void md_request_method(void *data, const char *at, size_t length);
-void md_request_uri(void *data, const char *at, size_t length);
-void md_fragment(void *data, const char *at, size_t length);
-void md_request_path(void *data, const char *at, size_t length);
-void md_query_string(void *data, const char *at, size_t length);
-void md_http_version(void *data, const char *at, size_t length);
-void md_header_done(void *data, const char *at, size_t length);
+void mdt_http_field(void *data, const char *field, size_t flen, const char *value, size_t vlen);
+void mdt_request_method(void *data, const char *at, size_t length);
+void mdt_request_uri(void *data, const char *at, size_t length);
+void mdt_fragment(void *data, const char *at, size_t length);
+void mdt_request_path(void *data, const char *at, size_t length);
+void mdt_query_string(void *data, const char *at, size_t length);
+void mdt_http_version(void *data, const char *at, size_t length);
+void mdt_header_done(void *data, const char *at, size_t length);
 
 #endif /* http11_parser_h */

@@ -1,8 +1,8 @@
 ####Midnight - A simple & fast HTTP daemon
 
-Currently only supports GET requests, handled by a worker thread pool.
+Currently only supports GET requests, handled by dispatch blocks.
 
-Very much alpha until otherwise indicated.
+Alpha until otherwise indicated.
 
 Build (inside 'midnight' directory):
 
@@ -10,13 +10,12 @@ Build (inside 'midnight' directory):
     $ ./midnight
 
 ####OPTIONS
--h, --help			help information  
--e, --error			error-only logging  
--p, --port			port to listen on (default: 8080)  
--a, --address 		IP address to bind to (default: all)  
--d, --docroot		HTML document root (default: ./docroot)  
--n, --nthreads		number of threads to run with (default: 2)  
--q, --quiet			run silently
+-h, --help          help information  
+-e, --error         error-only logging  
+-p, --port          port to listen on (default: 8080)  
+-a, --address       IP address to bind to (default: all)  
+-d, --docroot       HTML document root (default: ./docroot)  
+-q, --quiet         run silently
 
 ####CREDITS
 Includes Zed Shaw's famous, fast & secure HTTP request parser.

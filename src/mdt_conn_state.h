@@ -1,5 +1,14 @@
-#ifndef events_h
-#define events_h
+/*
+
+connection state header
+
+(c) 2013 Kyle J Aleshire
+All rights reserved
+
+*/
+
+#ifndef mdt_conn_state_h
+#define mdt_conn_state_h
 
 typedef enum StateEvent {
 	OPEN = 10,
@@ -12,7 +21,8 @@ typedef enum StateEvent {
 	GET_NOT_VALID = 17,
 	GET_NOT_FOUND = 18,
 	CLOSE = 19,
-	DONE = 20
+	DONE = 20,
+	NOT_IMP = 21
 } StateEvent;
 
-#endif /* events_h */
+#endif /* mdt_conn_state_h */
