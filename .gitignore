@@ -24,7 +24,7 @@ midnight
 midnight.sublime-workspace
 midnight.sublime-project
 http11_parser.c
-mdt_worker.c
+mdt_task.c
 site*
 docroot
 *.plist

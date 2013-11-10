@@ -10,7 +10,7 @@ All rights reserved
 #include <mdt_core.h>
 #include <http11_parser.h>
 #include <mdt_hash.h>
-#include <mdt_worker.h>
+#include <mdt_task.h>
 #include <mdt_conn_state.h>
 
 #ifdef DEBUG
